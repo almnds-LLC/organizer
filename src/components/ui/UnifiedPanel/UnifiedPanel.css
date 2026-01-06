@@ -538,3 +538,11 @@
 .form-row .form-group {
   flex: 1;
 }
+
+/* Merge error message */
+.merge-error {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin: 0.5rem 0 0;
+  text-align: center;
+}

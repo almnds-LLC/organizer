@@ -1,6 +1,7 @@
 import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { useDrawerStore, getCategoryColor } from '../../../store/drawerStore';
 import { getContrastColor } from '../../../utils/colorHelpers';
+import { canMergeCompartments, canSplitCompartment } from '../../../utils/compartmentHelpers';
 import { useIsMobile } from '../../../hooks/useMediaQuery';
 import type { StoredItem, Compartment, Drawer, Category, SubCompartment } from '../../../types/drawer';
 import { ChevronLeft } from 'lucide-react';
@@ -27,6 +28,8 @@ export function EditView() {
     removeDrawer,
     drawerOrder,
     selectSubCompartment,
+    mergeSelectedCompartments,
+    splitCompartment,
   } = useDrawerStore();
 
   const isMobile = useIsMobile();
@@ -241,6 +244,16 @@ export function EditView() {
                 </div>
               </div>
             </div>
+
+            {canSplitCompartment(selectedCompartment) && (
+              <button
+                className="btn-secondary full-width"
+                onClick={() => splitCompartment(selectedCompartment.id)}
+                style={{ marginTop: '1rem' }}
+              >
+                Split into {(selectedCompartment.rowSpan ?? 1) * (selectedCompartment.colSpan ?? 1)} cells
+              </button>
+            )}
           </div>
         )}
 
@@ -253,6 +266,7 @@ export function EditView() {
             setDividerCountForSelected={setDividerCountForSelected}
             clearAllContents={() => applyToSelected({ label: '' })}
             clearSelection={clearSelection}
+            mergeSelectedCompartments={mergeSelectedCompartments}
           />
         )}
 
@@ -492,6 +506,7 @@ interface MassEditPanelProps {
   setDividerCountForSelected: (count: number) => void;
   clearAllContents: () => void;
   clearSelection: () => void;
+  mergeSelectedCompartments: () => Promise<void>;
 }
 
 function MassEditPanel({
@@ -501,7 +516,12 @@ function MassEditPanel({
   setDividerCountForSelected,
   clearAllContents,
   clearSelection,
+  mergeSelectedCompartments,
 }: MassEditPanelProps) {
+  const mergeValidation = useMemo(
+    () => canMergeCompartments(compartments, selectedCompartmentIds),
+    [compartments, selectedCompartmentIds]
+  );
   const initialDividers = useMemo(() => {
     const counts: Record<number, number> = {};
     selectedCompartmentIds.forEach((id) => {
@@ -570,6 +590,20 @@ function MassEditPanel({
           </button>
         </div>
       </div>
+
+      <hr className="divider" />
+
+      <button
+        className="btn-primary full-width"
+        onClick={mergeSelectedCompartments}
+        disabled={!mergeValidation.valid}
+        title={mergeValidation.error || 'Merge selected compartments'}
+      >
+        Merge into 1 Compartment
+      </button>
+      {!mergeValidation.valid && mergeValidation.error && (
+        <p className="merge-error">{mergeValidation.error}</p>
+      )}
 
       <hr className="divider" />
 
