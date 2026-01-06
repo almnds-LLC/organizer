@@ -18,6 +18,8 @@ import {
   broadcastDrawerDeleted,
   broadcastCompartmentUpdated,
   broadcastDividersChanged,
+  broadcastCompartmentsMerged,
+  broadcastCompartmentSplit,
   broadcastItemUpdated,
   broadcastItemsBatchUpdated,
   broadcastCategoryCreated,
@@ -915,7 +917,12 @@ export const useDrawerStore = create<DrawerStore>()(
               selectedCompartmentIds: new Set([result.compartment.id]),
             }));
 
-            // TODO: Broadcast merge to other users
+            // Broadcast merge to other users
+            broadcastCompartmentsMerged(
+              activeDrawerId,
+              result.deletedIds,
+              newCompartments[result.compartment.id]
+            );
           } catch (error) {
             console.error('Failed to merge compartments:', error);
           }
@@ -1010,7 +1017,9 @@ export const useDrawerStore = create<DrawerStore>()(
               selectedCompartmentIds: new Set([compartmentId]),
             }));
 
-            // TODO: Broadcast split to other users
+            // Broadcast split to other users
+            const newCompartmentsList = result.compartments.map(comp => newCompartments[comp.id]);
+            broadcastCompartmentSplit(activeDrawerId, compartmentId, newCompartmentsList);
           } catch (error) {
             console.error('Failed to split compartment:', error);
           }

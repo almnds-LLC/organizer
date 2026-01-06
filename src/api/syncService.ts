@@ -169,6 +169,90 @@ export function broadcastDividersChanged(
   // (creating/deleting sub-compartments with new IDs). These changes will be lost if made offline.
 }
 
+// Broadcast compartments merged
+export function broadcastCompartmentsMerged(
+  drawerId: string,
+  deletedIds: string[],
+  newCompartment: {
+    id: string;
+    row: number;
+    col: number;
+    rowSpan: number;
+    colSpan: number;
+    dividerOrientation: 'horizontal' | 'vertical';
+    subCompartments: SubCompartment[];
+  }
+) {
+  if (shouldBroadcast()) {
+    roomWebSocket.send({
+      type: 'compartments_merged',
+      drawerId,
+      deletedIds,
+      newCompartment: {
+        id: newCompartment.id,
+        row: newCompartment.row,
+        col: newCompartment.col,
+        rowSpan: newCompartment.rowSpan,
+        colSpan: newCompartment.colSpan,
+        dividerOrientation: newCompartment.dividerOrientation,
+        subCompartments: newCompartment.subCompartments.map((sc, index) => ({
+          id: sc.id,
+          relativeSize: sc.relativeSize,
+          sortOrder: index,
+          item: sc.item ? {
+            label: sc.item.label,
+            categoryId: sc.item.categoryId,
+            quantity: sc.item.quantity,
+          } : null,
+        })),
+      },
+    });
+  }
+  // Note: Merge operations aren't queued offline as they involve complex server-side logic
+}
+
+// Broadcast compartment split
+export function broadcastCompartmentSplit(
+  drawerId: string,
+  deletedId: string,
+  newCompartments: Array<{
+    id: string;
+    row: number;
+    col: number;
+    rowSpan: number;
+    colSpan: number;
+    dividerOrientation: 'horizontal' | 'vertical';
+    subCompartments: SubCompartment[];
+  }>
+) {
+  if (shouldBroadcast()) {
+    roomWebSocket.send({
+      type: 'compartment_split',
+      drawerId,
+      deletedId,
+      newCompartments: newCompartments.map((comp) => ({
+        id: comp.id,
+        row: comp.row,
+        col: comp.col,
+        rowSpan: comp.rowSpan,
+        colSpan: comp.colSpan,
+        dividerOrientation: comp.dividerOrientation,
+        subCompartments: comp.subCompartments.map((sc, index) => ({
+          id: sc.id,
+          relativeSize: sc.relativeSize,
+          sortOrder: index,
+          item: sc.item ? {
+            label: sc.item.label,
+            categoryId: sc.item.categoryId,
+            quantity: sc.item.quantity,
+          } : null,
+        })),
+      })),
+    });
+  }
+  // Note: Split operations aren't queued offline as they involve complex server-side logic
+}
+
 // Broadcast item updated
 export function broadcastItemUpdated(
   drawerId: string,

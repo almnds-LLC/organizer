@@ -214,6 +214,14 @@ function handleRemoteMessage(message: SyncMessage) {
       applyRemoteDividersChange(message.drawerId, message.compartmentId, message.subCompartments);
       break;
 
+    case 'compartments_merged':
+      applyRemoteCompartmentsMerged(message.drawerId, message.deletedIds, message.newCompartment);
+      break;
+
+    case 'compartment_split':
+      applyRemoteCompartmentSplit(message.drawerId, message.deletedId, message.newCompartments);
+      break;
+
     case 'item_updated': {
       // Check for conflict before applying
       const remoteVersion = {
@@ -449,6 +457,134 @@ function applyRemoteDividersChange(
           },
         },
       },
+    };
+  });
+}
+
+function applyRemoteCompartmentsMerged(
+  drawerId: string,
+  deletedIds: string[],
+  newCompartment: {
+    id: string;
+    row: number;
+    col: number;
+    rowSpan: number;
+    colSpan: number;
+    dividerOrientation: 'horizontal' | 'vertical';
+    subCompartments: Array<{ id: string; relativeSize: number; sortOrder: number; item: { label: string; categoryId?: string; quantity?: number } | null }>;
+  }
+) {
+  useDrawerStore.setState((state) => {
+    const drawer = state.drawers[drawerId];
+    if (!drawer) return state;
+
+    // Remove deleted compartments and add the new merged one
+    const updatedCompartments = { ...drawer.compartments };
+    for (const id of deletedIds) {
+      delete updatedCompartments[id];
+    }
+
+    const subCompartments: SubCompartment[] = newCompartment.subCompartments
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((sc) => ({
+        id: sc.id,
+        relativeSize: sc.relativeSize,
+        item: sc.item ? {
+          label: sc.item.label,
+          categoryId: sc.item.categoryId,
+          quantity: sc.item.quantity,
+        } : null,
+      }));
+
+    updatedCompartments[newCompartment.id] = {
+      id: newCompartment.id,
+      row: newCompartment.row,
+      col: newCompartment.col,
+      rowSpan: newCompartment.rowSpan,
+      colSpan: newCompartment.colSpan,
+      dividerOrientation: newCompartment.dividerOrientation,
+      subCompartments,
+    };
+
+    // Clear selection if any selected compartment was deleted
+    let newSelectedCompartmentIds = state.selectedCompartmentIds;
+    if (deletedIds.some(id => state.selectedCompartmentIds.includes(id))) {
+      newSelectedCompartmentIds = [];
+    }
+
+    return {
+      drawers: {
+        ...state.drawers,
+        [drawerId]: {
+          ...drawer,
+          compartments: updatedCompartments,
+        },
+      },
+      selectedCompartmentIds: newSelectedCompartmentIds,
+    };
+  });
+}
+
+function applyRemoteCompartmentSplit(
+  drawerId: string,
+  deletedId: string,
+  newCompartments: Array<{
+    id: string;
+    row: number;
+    col: number;
+    rowSpan: number;
+    colSpan: number;
+    dividerOrientation: 'horizontal' | 'vertical';
+    subCompartments: Array<{ id: string; relativeSize: number; sortOrder: number; item: { label: string; categoryId?: string; quantity?: number } | null }>;
+  }>
+) {
+  useDrawerStore.setState((state) => {
+    const drawer = state.drawers[drawerId];
+    if (!drawer) return state;
+
+    // Remove the split compartment and add the new ones
+    const updatedCompartments = { ...drawer.compartments };
+    delete updatedCompartments[deletedId];
+
+    for (const comp of newCompartments) {
+      const subCompartments: SubCompartment[] = comp.subCompartments
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((sc) => ({
+          id: sc.id,
+          relativeSize: sc.relativeSize,
+          item: sc.item ? {
+            label: sc.item.label,
+            categoryId: sc.item.categoryId,
+            quantity: sc.item.quantity,
+          } : null,
+        }));
+
+      updatedCompartments[comp.id] = {
+        id: comp.id,
+        row: comp.row,
+        col: comp.col,
+        rowSpan: comp.rowSpan,
+        colSpan: comp.colSpan,
+        dividerOrientation: comp.dividerOrientation,
+        subCompartments,
+      };
+    }
+
+    // Clear selection if the split compartment was selected
+    let newSelectedCompartmentIds = state.selectedCompartmentIds;
+    if (state.selectedCompartmentIds.includes(deletedId)) {
+      newSelectedCompartmentIds = [];
+    }
+
+    return {
+      drawers: {
+        ...state.drawers,
+        [drawerId]: {
+          ...drawer,
+          compartments: updatedCompartments,
+        },
+      },
+      selectedCompartmentIds: newSelectedCompartmentIds,
     };
   });
 }

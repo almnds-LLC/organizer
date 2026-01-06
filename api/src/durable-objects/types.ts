@@ -22,6 +22,8 @@ export type SyncMessage =
   // Compartment operations
   | { type: 'compartment_updated'; drawerId: string; compartmentId: string; changes: { dividerOrientation?: 'horizontal' | 'vertical' } }
   | { type: 'dividers_changed'; drawerId: string; compartmentId: string; subCompartments: SyncSubCompartment[] }
+  | { type: 'compartments_merged'; drawerId: string; deletedIds: string[]; newCompartment: SyncCompartment }
+  | { type: 'compartment_split'; drawerId: string; deletedId: string; newCompartments: SyncCompartment[] }
 
   // Sub-compartment/item operations
   | { type: 'item_updated'; drawerId: string; compartmentId: string; subCompartmentId: string; item: SyncItem | null }
