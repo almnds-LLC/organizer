@@ -829,7 +829,7 @@ export const useDrawerStore = create<DrawerStore>()(
       },
 
       mergeSelectedCompartments: async () => {
-        const { activeDrawerId, drawers, selectedCompartmentIds, clearSelection } = get();
+        const { activeDrawerId, drawers, selectedCompartmentIds } = get();
         const authState = useAuthStore.getState();
         if (!activeDrawerId || selectedCompartmentIds.size < 2) return;
 
@@ -957,7 +957,7 @@ export const useDrawerStore = create<DrawerStore>()(
       },
 
       splitCompartment: async (compartmentId) => {
-        const { activeDrawerId, drawers, clearSelection } = get();
+        const { activeDrawerId, drawers } = get();
         const authState = useAuthStore.getState();
         if (!activeDrawerId) return;
 

@@ -18,6 +18,8 @@ function createTestDrawer(id: string, name: string, items: Array<{ row: number; 
       id: compId,
       row: item.row,
       col: item.col,
+      rowSpan: 1,
+      colSpan: 1,
       dividerOrientation: 'horizontal',
       subCompartments: [
         {
@@ -97,6 +99,8 @@ describe('inventoryHelpers', () => {
             id: 'c1',
             row: 0,
             col: 0,
+            rowSpan: 1,
+            colSpan: 1,
             dividerOrientation: 'horizontal',
             subCompartments: [{ id: 's1', relativeSize: 1, item: null }],
           },
@@ -242,6 +246,8 @@ describe('inventoryHelpers', () => {
             id: 'c1',
             row: 0,
             col: 0,
+            rowSpan: 1,
+            colSpan: 1,
             dividerOrientation: 'horizontal',
             subCompartments: [
               { id: 's1', relativeSize: 1, item: { label: 'Item' } },
@@ -251,6 +257,8 @@ describe('inventoryHelpers', () => {
             id: 'c2',
             row: 0,
             col: 1,
+            rowSpan: 1,
+            colSpan: 1,
             dividerOrientation: 'horizontal',
             subCompartments: [
               { id: 's2', relativeSize: 1, item: null },

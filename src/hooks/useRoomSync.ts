@@ -273,7 +273,7 @@ function handleRemoteMessage(message: SyncMessage) {
 }
 
 // Handle being removed from a room
-function handleMemberRemoved(userId: string, roomId: string) {
+function handleMemberRemoved(userId: string, _roomId: string) {
   const authState = useAuthStore.getState();
 
   // Only handle if this is about the current user
@@ -508,8 +508,8 @@ function applyRemoteCompartmentsMerged(
 
     // Clear selection if any selected compartment was deleted
     let newSelectedCompartmentIds = state.selectedCompartmentIds;
-    if (deletedIds.some(id => state.selectedCompartmentIds.includes(id))) {
-      newSelectedCompartmentIds = [];
+    if (deletedIds.some(id => state.selectedCompartmentIds.has(id))) {
+      newSelectedCompartmentIds = new Set<string>();
     }
 
     return {
@@ -572,8 +572,8 @@ function applyRemoteCompartmentSplit(
 
     // Clear selection if the split compartment was selected
     let newSelectedCompartmentIds = state.selectedCompartmentIds;
-    if (state.selectedCompartmentIds.includes(deletedId)) {
-      newSelectedCompartmentIds = [];
+    if (state.selectedCompartmentIds.has(deletedId)) {
+      newSelectedCompartmentIds = new Set<string>();
     }
 
     return {

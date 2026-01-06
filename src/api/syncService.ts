@@ -40,6 +40,8 @@ export function broadcastDrawerCreated(drawer: Drawer, sortOrder: number) {
       id: comp.id,
       row: comp.row,
       col: comp.col,
+      rowSpan: comp.rowSpan ?? 1,
+      colSpan: comp.colSpan ?? 1,
       dividerOrientation: comp.dividerOrientation,
       subCompartments: comp.subCompartments.map((sc, index) => ({
         id: sc.id,
