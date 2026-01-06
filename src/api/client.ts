@@ -328,6 +328,24 @@ class ApiClient {
     });
   }
 
+  async mergeCompartments(drawerId: string, compartmentIds: string[]): Promise<{
+    compartment: ApiCompartment & { subCompartments: ApiSubCompartment[] };
+    deletedIds: string[];
+  }> {
+    return this.fetch(`/drawers/${drawerId}/compartments/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ compartmentIds }),
+    });
+  }
+
+  async splitCompartment(drawerId: string, compartmentId: string): Promise<{
+    compartments: Array<ApiCompartment & { subCompartments: ApiSubCompartment[] }>;
+  }> {
+    return this.fetch(`/drawers/${drawerId}/compartments/${compartmentId}/split`, {
+      method: 'POST',
+    });
+  }
+
   // Category endpoints
   async getCategories(roomId: string): Promise<ApiCategory[]> {
     const response = await this.fetch<{ categories: ApiCategory[] }>(`/rooms/${roomId}/categories`);
