@@ -329,3 +329,88 @@ drawerRoutes.patch(
     });
   }
 );
+
+const mergeSchema = z.object({
+  compartmentIds: z.array(z.string()).min(2),
+});
+
+drawerRoutes.post(
+  '/drawers/:drawerId/compartments/merge',
+  zValidator('json', mergeSchema),
+  async (c) => {
+    const auth = c.get('auth');
+    const { drawerId } = c.req.param();
+    const { compartmentIds } = c.req.valid('json');
+    const storage = createStorageProvider(c.env);
+
+    const drawer = await storage.drawers.findById(drawerId);
+    if (!drawer) {
+      throw new NotFoundError('Drawer not found');
+    }
+
+    await checkRoomAccess(storage, drawer.roomId, auth.userId, 'drawer:update');
+
+    const result = await storage.compartments.merge(drawerId, compartmentIds);
+
+    return c.json({
+      compartment: {
+        id: result.compartment.id,
+        drawerId: result.compartment.drawerId,
+        row: result.compartment.row,
+        col: result.compartment.col,
+        rowSpan: result.compartment.rowSpan,
+        colSpan: result.compartment.colSpan,
+        dividerOrientation: result.compartment.dividerOrientation,
+        subCompartments: result.subCompartments.map((sub) => ({
+          id: sub.id,
+          compartmentId: sub.compartmentId,
+          relativeSize: sub.relativeSize,
+          sortOrder: sub.displayOrder,
+          itemLabel: sub.itemLabel,
+          itemCategoryId: sub.itemCategoryId,
+          itemQuantity: sub.itemQuantity,
+        })),
+      },
+      deletedIds: compartmentIds.filter((id) => id !== result.compartment.id),
+    });
+  }
+);
+
+drawerRoutes.post(
+  '/drawers/:drawerId/compartments/:compartmentId/split',
+  async (c) => {
+    const auth = c.get('auth');
+    const { drawerId, compartmentId } = c.req.param();
+    const storage = createStorageProvider(c.env);
+
+    const drawer = await storage.drawers.findById(drawerId);
+    if (!drawer) {
+      throw new NotFoundError('Drawer not found');
+    }
+
+    await checkRoomAccess(storage, drawer.roomId, auth.userId, 'drawer:update');
+
+    const results = await storage.compartments.split(compartmentId);
+
+    return c.json({
+      compartments: results.map((r) => ({
+        id: r.compartment.id,
+        drawerId: r.compartment.drawerId,
+        row: r.compartment.row,
+        col: r.compartment.col,
+        rowSpan: r.compartment.rowSpan,
+        colSpan: r.compartment.colSpan,
+        dividerOrientation: r.compartment.dividerOrientation,
+        subCompartments: r.subCompartments.map((sub) => ({
+          id: sub.id,
+          compartmentId: sub.compartmentId,
+          relativeSize: sub.relativeSize,
+          sortOrder: sub.displayOrder,
+          itemLabel: sub.itemLabel,
+          itemCategoryId: sub.itemCategoryId,
+          itemQuantity: sub.itemQuantity,
+        })),
+      })),
+    });
+  }
+);

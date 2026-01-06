@@ -76,6 +76,8 @@ export interface ICompartmentRepository {
   findById(id: string): Promise<Compartment | null>;
   update(id: string, input: UpdateCompartmentInput): Promise<Compartment>;
   setDividerCount(compartmentId: string, count: number): Promise<SubCompartment[]>;
+  merge(drawerId: string, compartmentIds: string[]): Promise<{ compartment: Compartment; subCompartments: SubCompartment[] }>;
+  split(compartmentId: string): Promise<Array<{ compartment: Compartment; subCompartments: SubCompartment[] }>>;
 }
 
 export interface ISubCompartmentRepository {

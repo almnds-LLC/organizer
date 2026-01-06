@@ -375,6 +375,273 @@ export class CompartmentRepository implements ICompartmentRepository {
 
     return result;
   }
+
+  async merge(
+    drawerId: string,
+    compartmentIds: string[]
+  ): Promise<{ compartment: Compartment; subCompartments: SubCompartment[] }> {
+    if (compartmentIds.length < 2) {
+      throw new Error('At least 2 compartments required for merge');
+    }
+
+    // Fetch all compartments to be merged
+    const placeholders = compartmentIds.map(() => '?').join(',');
+    const compartmentRows = await this.db
+      .prepare(`SELECT * FROM compartments WHERE id IN (${placeholders}) AND drawer_id = ?`)
+      .bind(...compartmentIds, drawerId)
+      .all<CompartmentRow>();
+
+    if (compartmentRows.results.length !== compartmentIds.length) {
+      throw new NotFoundError('Some compartments not found');
+    }
+
+    const compartments = compartmentRows.results.map(mapRowToCompartment);
+
+    // Verify all are 1x1 cells
+    for (const comp of compartments) {
+      if ((comp.rowSpan ?? 1) !== 1 || (comp.colSpan ?? 1) !== 1) {
+        throw new Error('Can only merge single-cell compartments');
+      }
+    }
+
+    // Calculate bounding box
+    let minRow = compartments[0].row;
+    let maxRow = compartments[0].row;
+    let minCol = compartments[0].col;
+    let maxCol = compartments[0].col;
+    for (const comp of compartments) {
+      minRow = Math.min(minRow, comp.row);
+      maxRow = Math.max(maxRow, comp.row);
+      minCol = Math.min(minCol, comp.col);
+      maxCol = Math.max(maxCol, comp.col);
+    }
+
+    const rowSpan = maxRow - minRow + 1;
+    const colSpan = maxCol - minCol + 1;
+
+    // Verify it forms a rectangle
+    if (compartmentIds.length !== rowSpan * colSpan) {
+      throw new Error('Selection must form a rectangle');
+    }
+
+    // Find anchor (top-left) compartment
+    const anchor = compartments.find(c => c.row === minRow && c.col === minCol);
+    if (!anchor) throw new Error('Anchor compartment not found');
+
+    const toDeleteIds = compartmentIds.filter(id => id !== anchor.id);
+    const now = new Date().toISOString();
+
+    // Collect all items from compartments being deleted
+    const allSubRows = await this.db
+      .prepare(`SELECT * FROM sub_compartments WHERE compartment_id IN (${placeholders}) ORDER BY display_order`)
+      .bind(...compartmentIds)
+      .all<SubCompartmentRow>();
+    const allItems = allSubRows.results
+      .map(mapRowToSubCompartment)
+      .filter(s => s.itemLabel !== null);
+
+    const statements: D1PreparedStatement[] = [];
+
+    // Delete sub-compartments of compartments being deleted
+    if (toDeleteIds.length > 0) {
+      const deletePlaceholders = toDeleteIds.map(() => '?').join(',');
+      statements.push(
+        this.db
+          .prepare(`DELETE FROM sub_compartments WHERE compartment_id IN (${deletePlaceholders})`)
+          .bind(...toDeleteIds)
+      );
+
+      // Delete the compartments themselves
+      statements.push(
+        this.db
+          .prepare(`DELETE FROM compartments WHERE id IN (${deletePlaceholders})`)
+          .bind(...toDeleteIds)
+      );
+    }
+
+    // Update anchor with new spans
+    statements.push(
+      this.db
+        .prepare('UPDATE compartments SET row_span = ?, col_span = ?, updated_at = ? WHERE id = ?')
+        .bind(rowSpan, colSpan, now, anchor.id)
+    );
+
+    // Rebuild sub-compartments for anchor with collected items
+    statements.push(
+      this.db
+        .prepare('DELETE FROM sub_compartments WHERE compartment_id = ?')
+        .bind(anchor.id)
+    );
+
+    const newSubCompartments: SubCompartment[] = [];
+    const subCount = Math.max(2, allItems.length);
+    const relativeSize = 1 / subCount;
+
+    for (let i = 0; i < subCount; i++) {
+      const subId = generateId();
+      const item = allItems[i];
+      statements.push(
+        this.db
+          .prepare(
+            `INSERT INTO sub_compartments (id, compartment_id, display_order, relative_size, item_label, item_category_id, item_quantity, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            subId,
+            anchor.id,
+            i,
+            relativeSize,
+            item?.itemLabel ?? null,
+            item?.itemCategoryId ?? null,
+            item?.itemQuantity ?? null,
+            now,
+            now
+          )
+      );
+      newSubCompartments.push({
+        id: subId,
+        compartmentId: anchor.id,
+        displayOrder: i,
+        relativeSize,
+        itemLabel: item?.itemLabel ?? null,
+        itemCategoryId: item?.itemCategoryId ?? null,
+        itemQuantity: item?.itemQuantity ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await this.db.batch(statements);
+
+    const updatedAnchor: Compartment = {
+      ...anchor,
+      rowSpan,
+      colSpan,
+      updatedAt: now,
+    };
+
+    return { compartment: updatedAnchor, subCompartments: newSubCompartments };
+  }
+
+  async split(
+    compartmentId: string
+  ): Promise<Array<{ compartment: Compartment; subCompartments: SubCompartment[] }>> {
+    const comp = await this.findById(compartmentId);
+    if (!comp) throw new NotFoundError('Compartment not found');
+
+    const rowSpan = comp.rowSpan ?? 1;
+    const colSpan = comp.colSpan ?? 1;
+
+    if (rowSpan === 1 && colSpan === 1) {
+      throw new Error('Cannot split a single-cell compartment');
+    }
+
+    // Get existing items from this compartment
+    const subRows = await this.db
+      .prepare('SELECT * FROM sub_compartments WHERE compartment_id = ? ORDER BY display_order')
+      .bind(compartmentId)
+      .all<SubCompartmentRow>();
+    const existingItems = subRows.results
+      .map(mapRowToSubCompartment)
+      .filter(s => s.itemLabel !== null);
+
+    const now = new Date().toISOString();
+    const statements: D1PreparedStatement[] = [];
+    const result: Array<{ compartment: Compartment; subCompartments: SubCompartment[] }> = [];
+
+    // Delete existing sub-compartments
+    statements.push(
+      this.db
+        .prepare('DELETE FROM sub_compartments WHERE compartment_id = ?')
+        .bind(compartmentId)
+    );
+
+    // Create new compartments for each cell in the span
+    let itemIndex = 0;
+    for (let r = 0; r < rowSpan; r++) {
+      for (let c = 0; c < colSpan; c++) {
+        const isAnchor = r === 0 && c === 0;
+        const newRow = comp.row + r;
+        const newCol = comp.col + c;
+
+        let newCompId: string;
+        if (isAnchor) {
+          // Update the anchor to be 1x1
+          statements.push(
+            this.db
+              .prepare('UPDATE compartments SET row_span = 1, col_span = 1, updated_at = ? WHERE id = ?')
+              .bind(now, compartmentId)
+          );
+          newCompId = compartmentId;
+        } else {
+          // Create new compartment
+          newCompId = generateId();
+          statements.push(
+            this.db
+              .prepare(
+                `INSERT INTO compartments (id, drawer_id, row, col, row_span, col_span, divider_orientation, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, 1, 1, ?, ?, ?)`
+              )
+              .bind(newCompId, comp.drawerId, newRow, newCol, comp.dividerOrientation, now, now)
+          );
+        }
+
+        // Create 2 sub-compartments per new compartment
+        const subCompartments: SubCompartment[] = [];
+        for (let i = 0; i < 2; i++) {
+          const subId = generateId();
+          // Put items in anchor cell only
+          const item = isAnchor && itemIndex < existingItems.length ? existingItems[itemIndex++] : null;
+          statements.push(
+            this.db
+              .prepare(
+                `INSERT INTO sub_compartments (id, compartment_id, display_order, relative_size, item_label, item_category_id, item_quantity, created_at, updated_at)
+                 VALUES (?, ?, ?, 0.5, ?, ?, ?, ?, ?)`
+              )
+              .bind(
+                subId,
+                newCompId,
+                i,
+                item?.itemLabel ?? null,
+                item?.itemCategoryId ?? null,
+                item?.itemQuantity ?? null,
+                now,
+                now
+              )
+          );
+          subCompartments.push({
+            id: subId,
+            compartmentId: newCompId,
+            displayOrder: i,
+            relativeSize: 0.5,
+            itemLabel: item?.itemLabel ?? null,
+            itemCategoryId: item?.itemCategoryId ?? null,
+            itemQuantity: item?.itemQuantity ?? null,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        result.push({
+          compartment: {
+            id: newCompId,
+            drawerId: comp.drawerId,
+            row: newRow,
+            col: newCol,
+            rowSpan: 1,
+            colSpan: 1,
+            dividerOrientation: comp.dividerOrientation,
+            createdAt: isAnchor ? comp.createdAt : now,
+            updatedAt: now,
+          },
+          subCompartments,
+        });
+      }
+    }
+
+    await this.db.batch(statements);
+    return result;
+  }
 }
 
 export class SubCompartmentRepository implements ISubCompartmentRepository {
