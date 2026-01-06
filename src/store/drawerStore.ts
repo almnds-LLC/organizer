@@ -260,6 +260,8 @@ interface DrawerStore {
     compartmentId: string,
     orientation: 'horizontal' | 'vertical'
   ) => void | Promise<void>;
+  mergeSelectedCompartments: () => Promise<void>;
+  splitCompartment: (compartmentId: string) => Promise<void>;
 
   // Sub-compartment actions
   updateItem: (
@@ -822,6 +824,241 @@ export const useDrawerStore = create<DrawerStore>()(
 
         // Broadcast to other connected users
         broadcastCompartmentUpdated(activeDrawerId, compartmentId, { dividerOrientation: orientation });
+      },
+
+      mergeSelectedCompartments: async () => {
+        const { activeDrawerId, drawers, selectedCompartmentIds, clearSelection } = get();
+        const authState = useAuthStore.getState();
+        if (!activeDrawerId || selectedCompartmentIds.size < 2) return;
+
+        const drawer = drawers[activeDrawerId];
+        if (!drawer) return;
+
+        const compartmentIds = Array.from(selectedCompartmentIds);
+        const compartments = compartmentIds.map(id => drawer.compartments[id]).filter(Boolean);
+
+        // Validate all are 1x1 cells
+        if (compartments.some(c => (c.rowSpan ?? 1) !== 1 || (c.colSpan ?? 1) !== 1)) {
+          console.error('Can only merge single-cell compartments');
+          return;
+        }
+
+        // Calculate bounding box
+        let minRow = compartments[0].row;
+        let maxRow = compartments[0].row;
+        let minCol = compartments[0].col;
+        let maxCol = compartments[0].col;
+        for (const comp of compartments) {
+          minRow = Math.min(minRow, comp.row);
+          maxRow = Math.max(maxRow, comp.row);
+          minCol = Math.min(minCol, comp.col);
+          maxCol = Math.max(maxCol, comp.col);
+        }
+
+        // Verify it forms a rectangle
+        if (compartmentIds.length !== (maxRow - minRow + 1) * (maxCol - minCol + 1)) {
+          console.error('Selection must form a rectangle');
+          return;
+        }
+
+        // Find anchor (top-left) compartment
+        const anchor = compartments.find(c => c.row === minRow && c.col === minCol);
+        if (!anchor) return;
+
+        const toDeleteIds = compartmentIds.filter(id => id !== anchor.id);
+        const rowSpan = maxRow - minRow + 1;
+        const colSpan = maxCol - minCol + 1;
+
+        // Collect all items from compartments being merged
+        const allItems = compartments
+          .flatMap(c => c.subCompartments)
+          .filter(sc => sc.item)
+          .map(sc => sc.item!);
+
+        if (authState.mode === 'online') {
+          try {
+            const result = await api.mergeCompartments(activeDrawerId, compartmentIds);
+
+            // Update local state with server response
+            const newCompartments = { ...drawer.compartments };
+            for (const id of result.deletedIds) {
+              delete newCompartments[id];
+            }
+
+            const subCompartments: SubCompartment[] = result.compartment.subCompartments
+              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .map(sc => ({
+                id: sc.id,
+                relativeSize: sc.relativeSize,
+                item: sc.itemLabel ? {
+                  label: sc.itemLabel,
+                  categoryId: sc.itemCategoryId ?? undefined,
+                  quantity: sc.itemQuantity ?? undefined,
+                } : null,
+              }));
+
+            newCompartments[result.compartment.id] = {
+              id: result.compartment.id,
+              row: result.compartment.row,
+              col: result.compartment.col,
+              rowSpan: result.compartment.rowSpan,
+              colSpan: result.compartment.colSpan,
+              dividerOrientation: result.compartment.dividerOrientation,
+              subCompartments,
+            };
+
+            set(state => ({
+              drawers: {
+                ...state.drawers,
+                [activeDrawerId]: { ...drawer, compartments: newCompartments },
+              },
+              selectedCompartmentIds: new Set([result.compartment.id]),
+            }));
+
+            // TODO: Broadcast merge to other users
+          } catch (error) {
+            console.error('Failed to merge compartments:', error);
+          }
+        } else {
+          // Local mode
+          const subCount = Math.max(2, allItems.length);
+          const subCompartments: SubCompartment[] = Array.from({ length: subCount }, (_, i) => ({
+            id: generateId(),
+            relativeSize: 1 / subCount,
+            item: allItems[i] ?? null,
+          }));
+
+          const newCompartments = { ...drawer.compartments };
+          for (const id of toDeleteIds) {
+            delete newCompartments[id];
+          }
+          newCompartments[anchor.id] = {
+            ...anchor,
+            rowSpan,
+            colSpan,
+            subCompartments,
+          };
+
+          set(state => ({
+            drawers: {
+              ...state.drawers,
+              [activeDrawerId]: { ...drawer, compartments: newCompartments },
+            },
+            selectedCompartmentIds: new Set([anchor.id]),
+          }));
+        }
+      },
+
+      splitCompartment: async (compartmentId) => {
+        const { activeDrawerId, drawers, clearSelection } = get();
+        const authState = useAuthStore.getState();
+        if (!activeDrawerId) return;
+
+        const drawer = drawers[activeDrawerId];
+        const compartment = drawer?.compartments[compartmentId];
+        if (!compartment) return;
+
+        const rowSpan = compartment.rowSpan ?? 1;
+        const colSpan = compartment.colSpan ?? 1;
+
+        if (rowSpan === 1 && colSpan === 1) {
+          console.error('Cannot split a single-cell compartment');
+          return;
+        }
+
+        // Collect existing items
+        const existingItems = compartment.subCompartments
+          .filter(sc => sc.item)
+          .map(sc => sc.item!);
+
+        if (authState.mode === 'online') {
+          try {
+            const result = await api.splitCompartment(activeDrawerId, compartmentId);
+
+            // Update local state with server response
+            const newCompartments = { ...drawer.compartments };
+
+            for (const comp of result.compartments) {
+              const subCompartments: SubCompartment[] = comp.subCompartments
+                .sort((a, b) => a.sortOrder - b.sortOrder)
+                .map(sc => ({
+                  id: sc.id,
+                  relativeSize: sc.relativeSize,
+                  item: sc.itemLabel ? {
+                    label: sc.itemLabel,
+                    categoryId: sc.itemCategoryId ?? undefined,
+                    quantity: sc.itemQuantity ?? undefined,
+                  } : null,
+                }));
+
+              newCompartments[comp.id] = {
+                id: comp.id,
+                row: comp.row,
+                col: comp.col,
+                rowSpan: comp.rowSpan,
+                colSpan: comp.colSpan,
+                dividerOrientation: comp.dividerOrientation,
+                subCompartments,
+              };
+            }
+
+            set(state => ({
+              drawers: {
+                ...state.drawers,
+                [activeDrawerId]: { ...drawer, compartments: newCompartments },
+              },
+              selectedCompartmentIds: new Set([compartmentId]),
+            }));
+
+            // TODO: Broadcast split to other users
+          } catch (error) {
+            console.error('Failed to split compartment:', error);
+          }
+        } else {
+          // Local mode
+          const newCompartments = { ...drawer.compartments };
+          let itemIndex = 0;
+
+          for (let r = 0; r < rowSpan; r++) {
+            for (let c = 0; c < colSpan; c++) {
+              const isAnchor = r === 0 && c === 0;
+              const newRow = compartment.row + r;
+              const newCol = compartment.col + c;
+              const newId = isAnchor ? compartmentId : generateId();
+
+              const subCompartments: SubCompartment[] = [
+                {
+                  id: generateId(),
+                  relativeSize: 0.5,
+                  item: isAnchor && itemIndex < existingItems.length ? existingItems[itemIndex++] : null,
+                },
+                {
+                  id: generateId(),
+                  relativeSize: 0.5,
+                  item: isAnchor && itemIndex < existingItems.length ? existingItems[itemIndex++] : null,
+                },
+              ];
+
+              newCompartments[newId] = {
+                id: newId,
+                row: newRow,
+                col: newCol,
+                rowSpan: 1,
+                colSpan: 1,
+                dividerOrientation: compartment.dividerOrientation,
+                subCompartments,
+              };
+            }
+          }
+
+          set(state => ({
+            drawers: {
+              ...state.drawers,
+              [activeDrawerId]: { ...drawer, compartments: newCompartments },
+            },
+            selectedCompartmentIds: new Set([compartmentId]),
+          }));
+        }
       },
 
       updateItem: async (compartmentId, subCompartmentId, item) => {
