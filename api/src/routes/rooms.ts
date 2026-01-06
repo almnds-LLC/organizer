@@ -80,6 +80,8 @@ roomRoutes.get('/:roomId', async (c) => {
         drawerId: comp.drawerId,
         row: comp.row,
         col: comp.col,
+        rowSpan: comp.rowSpan,
+        colSpan: comp.colSpan,
         dividerOrientation: comp.dividerOrientation,
         subCompartments: comp.subCompartments.map((sub) => ({
           id: sub.id,

@@ -92,6 +92,8 @@ function createCompartment(
     id: generateId(),
     row,
     col,
+    rowSpan: 1,
+    colSpan: 1,
     dividerOrientation: DEFAULT_DIVIDER_ORIENTATION,
     subCompartments,
   };
@@ -363,6 +365,8 @@ export const useDrawerStore = create<DrawerStore>()(
                 id: apiComp.id,
                 row: apiComp.row,
                 col: apiComp.col,
+                rowSpan: apiComp.rowSpan ?? 1,
+                colSpan: apiComp.colSpan ?? 1,
                 dividerOrientation: apiComp.dividerOrientation,
                 subCompartments: apiComp.subCompartments
                   .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -1213,6 +1217,8 @@ export const useDrawerStore = create<DrawerStore>()(
               id: apiCompartment.id,
               row: apiCompartment.row,
               col: apiCompartment.col,
+              rowSpan: apiCompartment.rowSpan ?? 1,
+              colSpan: apiCompartment.colSpan ?? 1,
               dividerOrientation: apiCompartment.dividerOrientation,
               subCompartments,
             };

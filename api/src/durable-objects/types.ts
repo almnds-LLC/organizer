@@ -67,6 +67,8 @@ export interface SyncCompartment {
   id: string;
   row: number;
   col: number;
+  rowSpan: number;
+  colSpan: number;
   dividerOrientation: 'horizontal' | 'vertical';
   subCompartments: SyncSubCompartment[];
 }

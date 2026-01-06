@@ -80,6 +80,8 @@ export interface Compartment {
   drawerId: string;
   row: number;
   col: number;
+  rowSpan: number;
+  colSpan: number;
   dividerOrientation: DividerOrientation;
   createdAt: string;
   updatedAt: string;

@@ -20,6 +20,9 @@ coverage-merged/
 test-results/
 playwright-report/
 
+# Claude Code
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

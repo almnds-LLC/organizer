@@ -321,6 +321,8 @@ function applyRemoteDrawerCreate(
       id: syncComp.id,
       row: syncComp.row,
       col: syncComp.col,
+      rowSpan: syncComp.rowSpan ?? 1,
+      colSpan: syncComp.colSpan ?? 1,
       dividerOrientation: syncComp.dividerOrientation,
       subCompartments,
     };

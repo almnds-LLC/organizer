@@ -125,8 +125,8 @@ export class DrawerRepository implements IDrawerRepository {
         statements.push(
           this.db
             .prepare(
-              `INSERT INTO compartments (id, drawer_id, row, col, divider_orientation, created_at, updated_at)
-               VALUES (?, ?, ?, ?, 'horizontal', ?, ?)`
+              `INSERT INTO compartments (id, drawer_id, row, col, row_span, col_span, divider_orientation, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 1, 1, 'horizontal', ?, ?)`
             )
             .bind(compId, id, row, col, now, now)
         );
@@ -163,6 +163,8 @@ export class DrawerRepository implements IDrawerRepository {
           drawerId: id,
           row,
           col,
+          rowSpan: 1,
+          colSpan: 1,
           dividerOrientation: 'horizontal',
           createdAt: now,
           updatedAt: now,
@@ -496,6 +498,8 @@ interface CompartmentRow {
   drawer_id: string;
   row: number;
   col: number;
+  row_span: number;
+  col_span: number;
   divider_orientation: DividerOrientation;
   created_at: string;
   updated_at: string;
@@ -534,6 +538,8 @@ function mapRowToCompartment(row: CompartmentRow): Compartment {
     drawerId: row.drawer_id,
     row: row.row,
     col: row.col,
+    rowSpan: row.row_span ?? 1,
+    colSpan: row.col_span ?? 1,
     dividerOrientation: row.divider_orientation,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

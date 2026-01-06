@@ -70,13 +70,23 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
     }
   });
 
+  // Calculate dimensions based on spans (for merged compartments)
+  const dimensions = useMemo(() => {
+    const rowSpan = compartment.rowSpan ?? 1;
+    const colSpan = compartment.colSpan ?? 1;
+    const width = colSpan * COMPARTMENT_WIDTH + (colSpan - 1) * COMPARTMENT_GAP;
+    const height = rowSpan * COMPARTMENT_HEIGHT + (rowSpan - 1) * COMPARTMENT_GAP;
+    return { width, height, rowSpan, colSpan };
+  }, [compartment.rowSpan, compartment.colSpan]);
+
   const position: [number, number, number] = useMemo(
     () => [
-      compartment.col * (COMPARTMENT_WIDTH + COMPARTMENT_GAP),
-      (totalRows - 1 - compartment.row) * (COMPARTMENT_HEIGHT + COMPARTMENT_GAP),
+      // Position at anchor (top-left) plus offset to center of merged area
+      compartment.col * (COMPARTMENT_WIDTH + COMPARTMENT_GAP) + (dimensions.width - COMPARTMENT_WIDTH) / 2,
+      (totalRows - 1 - compartment.row) * (COMPARTMENT_HEIGHT + COMPARTMENT_GAP) - (dimensions.height - COMPARTMENT_HEIGHT) / 2,
       0,
     ],
-    [compartment.row, compartment.col, totalRows]
+    [compartment.row, compartment.col, totalRows, dimensions.width, dimensions.height]
   );
 
   // Handle single click action
@@ -161,41 +171,41 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
     <group position={position}>
       <group ref={groupRef}>
         <mesh position={[0, 0, 0.02]} {...frontMeshEvents}>
-          <boxGeometry args={[COMPARTMENT_WIDTH, COMPARTMENT_HEIGHT, 0.04]} />
+          <boxGeometry args={[dimensions.width, dimensions.height, 0.04]} />
           <meshStandardMaterial color={drawerFaceColor} />
         </mesh>
 
         <mesh position={[0, 0, 0.06]} {...frontMeshEvents}>
-          <boxGeometry args={[0.3, 0.04, 0.03]} />
+          <boxGeometry args={[Math.min(0.3, dimensions.width * 0.4), 0.04, 0.03]} />
           <meshStandardMaterial color={handleColor} metalness={0.4} roughness={0.4} />
         </mesh>
 
         <mesh position={[0, 0, -depth + wallThickness / 2]} {...sideMeshEvents}>
-          <boxGeometry args={[COMPARTMENT_WIDTH, COMPARTMENT_HEIGHT, wallThickness]} />
+          <boxGeometry args={[dimensions.width, dimensions.height, wallThickness]} />
           <meshStandardMaterial color={drawerInsideColor} />
         </mesh>
 
-        <mesh position={[-COMPARTMENT_WIDTH / 2 + wallThickness / 2, 0, -depth / 2]} {...sideMeshEvents}>
-          <boxGeometry args={[wallThickness, COMPARTMENT_HEIGHT, depth]} />
+        <mesh position={[-dimensions.width / 2 + wallThickness / 2, 0, -depth / 2]} {...sideMeshEvents}>
+          <boxGeometry args={[wallThickness, dimensions.height, depth]} />
           <meshStandardMaterial color={drawerSideColor} />
         </mesh>
 
-        <mesh position={[COMPARTMENT_WIDTH / 2 - wallThickness / 2, 0, -depth / 2]} {...sideMeshEvents}>
-          <boxGeometry args={[wallThickness, COMPARTMENT_HEIGHT, depth]} />
+        <mesh position={[dimensions.width / 2 - wallThickness / 2, 0, -depth / 2]} {...sideMeshEvents}>
+          <boxGeometry args={[wallThickness, dimensions.height, depth]} />
           <meshStandardMaterial color={drawerSideColor} />
         </mesh>
 
-        <mesh position={[0, -COMPARTMENT_HEIGHT / 2 + wallThickness / 2, -depth / 2]} {...sideMeshEvents}>
-          <boxGeometry args={[COMPARTMENT_WIDTH, wallThickness, depth]} />
+        <mesh position={[0, -dimensions.height / 2 + wallThickness / 2, -depth / 2]} {...sideMeshEvents}>
+          <boxGeometry args={[dimensions.width, wallThickness, depth]} />
           <meshStandardMaterial color={drawerSideColor} />
         </mesh>
 
         {hasContents && (
-          <group position={[0, -COMPARTMENT_HEIGHT * 0.25, 0.05]}>
+          <group position={[0, -dimensions.height * 0.25, 0.05]}>
             {compartment.subCompartments.map((sc, i) => {
               if (!sc.item) return null;
               const count = compartment.subCompartments.filter(s => s.item).length;
-              const spacing = Math.min(0.12, 0.35 / count);
+              const spacing = Math.min(0.12, Math.min(dimensions.width, dimensions.height) * 0.5 / count);
               const offset = (i - (compartment.subCompartments.length - 1) / 2) * spacing;
               const category = sc.item.categoryId ? categories[sc.item.categoryId] : null;
               const color = category ? getCategoryColor(category) : DEFAULT_ITEM_COLOR;
@@ -212,7 +222,7 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
         {isSelected && (
           <lineSegments position={[0, 0, 0.03]}>
             <edgesGeometry
-              args={[new THREE.BoxGeometry(COMPARTMENT_WIDTH + 0.04, COMPARTMENT_HEIGHT + 0.04, 0.02)]}
+              args={[new THREE.BoxGeometry(dimensions.width + 0.04, dimensions.height + 0.04, 0.02)]}
             />
             <lineBasicMaterial color="#3b82f6" linewidth={2} />
           </lineSegments>
@@ -221,7 +231,7 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
         {collaboratorOnThis && !isSelected && (
           <lineSegments position={[0, 0, 0.03]}>
             <edgesGeometry
-              args={[new THREE.BoxGeometry(COMPARTMENT_WIDTH + 0.04, COMPARTMENT_HEIGHT + 0.04, 0.02)]}
+              args={[new THREE.BoxGeometry(dimensions.width + 0.04, dimensions.height + 0.04, 0.02)]}
             />
             <lineBasicMaterial color={collaboratorOnThis.color} linewidth={2} transparent opacity={0.7} />
           </lineSegments>
@@ -229,7 +239,7 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
 
         {isSingleSelected && (
           <Html
-            position={[0, COMPARTMENT_HEIGHT / 2 + 0.05, 0.06]}
+            position={[0, dimensions.height / 2 + 0.05, 0.06]}
             zIndexRange={[10, 10]}
             style={{
               pointerEvents: 'auto',

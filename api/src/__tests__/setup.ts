@@ -93,6 +93,8 @@ export async function setupDatabase() {
         drawer_id TEXT NOT NULL,
         row INTEGER NOT NULL,
         col INTEGER NOT NULL,
+        row_span INTEGER NOT NULL DEFAULT 1,
+        col_span INTEGER NOT NULL DEFAULT 1,
         divider_orientation TEXT NOT NULL DEFAULT 'horizontal' CHECK(divider_orientation IN ('horizontal', 'vertical')),
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,

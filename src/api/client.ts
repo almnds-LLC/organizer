@@ -44,6 +44,8 @@ export interface ApiCompartment {
   drawerId: string;
   row: number;
   col: number;
+  rowSpan: number;
+  colSpan: number;
   dividerOrientation: 'horizontal' | 'vertical';
 }
 

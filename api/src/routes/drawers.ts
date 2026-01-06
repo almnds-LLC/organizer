@@ -97,6 +97,8 @@ drawerRoutes.post('/rooms/:roomId/drawers', zValidator('json', createDrawerSchem
     drawerId: comp.drawerId,
     row: comp.row,
     col: comp.col,
+    rowSpan: comp.rowSpan,
+    colSpan: comp.colSpan,
     dividerOrientation: comp.dividerOrientation,
     subCompartments: comp.subCompartments.map((sub) => ({
       id: sub.id,
@@ -141,6 +143,8 @@ drawerRoutes.get('/rooms/:roomId/drawers/:drawerId', async (c) => {
     drawerId: comp.drawerId,
     row: comp.row,
     col: comp.col,
+    rowSpan: comp.rowSpan,
+    colSpan: comp.colSpan,
     dividerOrientation: comp.dividerOrientation,
     subCompartments: comp.subCompartments.map((sub) => ({
       id: sub.id,
