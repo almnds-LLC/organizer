@@ -1,0 +1,118 @@
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Size variants */
+.switch.md .slider {
+  width: 44px;
+  height: 26px;
+}
+
+.switch.md .slider::before {
+  width: 22px;
+  height: 22px;
+}
+
+.switch.sm .slider {
+  width: 36px;
+  height: 20px;
+}
+
+.switch.sm .slider::before {
+  width: 16px;
+  height: 16px;
+}
+
+.switch.xs .slider {
+  width: 28px;
+  height: 16px;
+}
+
+.switch.xs .slider::before {
+  width: 12px;
+  height: 12px;
+}
+
+/* The slider track */
+.slider {
+  position: relative;
+  display: inline-block;
+  border-radius: 9999px;
+  background: #d1d5db;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s ease;
+}
+
+/* Checked state */
+.input:checked + .slider {
+  background: #3b82f6;
+}
+
+.switch.md .input:checked + .slider::before {
+  transform: translateX(18px);
+}
+
+.switch.sm .input:checked + .slider::before {
+  transform: translateX(16px);
+}
+
+.switch.xs .input:checked + .slider::before {
+  transform: translateX(12px);
+}
+
+/* Focus state */
+.input:focus-visible + .slider {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Hover state */
+.switch:not(.disabled):hover .slider {
+  background: #9ca3af;
+}
+
+.switch:not(.disabled) .input:checked:hover + .slider {
+  background: #2563eb;
+}
+
+/* Label */
+.label {
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.switch.sm .label {
+  font-size: 0.8125rem;
+}
+
+.switch.xs .label {
+  font-size: 0.6875rem;
+}

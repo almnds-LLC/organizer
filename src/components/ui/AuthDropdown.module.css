@@ -1,0 +1,300 @@
+.authDropdown {
+  position: relative;
+}
+
+.authTrigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  color: #374151;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.authTrigger:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.authTrigger svg {
+  flex-shrink: 0;
+}
+
+/* Desktop dropdown menu */
+.authDropdownMenu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 340px;
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+/* Auth tabs */
+.authTabs {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.authTab {
+  flex: 1;
+  padding: 0.875rem;
+  background: none;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.authTab:hover {
+  color: #374151;
+  background: #f9fafb;
+}
+
+.authTab.active {
+  color: #3b82f6;
+}
+
+.authTab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #3b82f6;
+}
+
+/* Form content */
+.authFormContent {
+  padding: 1.25rem;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formGroup label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.375rem;
+}
+
+.formGroup input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+  color: #111827;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.formGroup input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.formGroup input::placeholder {
+  color: #9ca3af;
+}
+
+.formHint {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+/* Turnstile */
+.turnstileContainer {
+  margin: 1rem 0;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Scale down the turnstile widget to fit better */
+.turnstileContainer > div {
+  transform: scale(0.98);
+  transform-origin: center;
+}
+
+/* Error message */
+.authError {
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin: 0 0 1rem 0;
+  padding: 0.5rem 0.75rem;
+  background: #fef2f2;
+  border-radius: 0.375rem;
+  border: 1px solid #fecaca;
+}
+
+/* Submit button */
+.authSubmit {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.authSubmit:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.authSubmit:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+/* Mobile modal overlay */
+.authModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Mobile modal */
+.authModal {
+  background: white;
+  width: 100%;
+  max-height: 90vh;
+  border-radius: 1rem 1rem 0 0;
+  overflow: hidden;
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.authModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.authModalHeader h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.authModalClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  border-radius: 0.375rem;
+  transition: all 0.15s ease;
+}
+
+.authModalClose:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.authModal .authTabs {
+  display: flex;
+  padding: 0.25rem;
+  margin: 1rem 1.25rem;
+  border-bottom: none;
+  gap: 0;
+  background: #f3f4f6;
+  border-radius: 0.5rem;
+}
+
+.authModal .authTab {
+  flex: 1;
+  border-radius: 0.375rem;
+  padding: 0.625rem;
+  margin: 0;
+}
+
+.authModal .authTab.active {
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.authModal .authTab.active::after {
+  display: none;
+}
+
+.authModal .authFormContent {
+  padding: 0 1.25rem 1.5rem;
+}
+
+.authModal .formGroup {
+  margin-bottom: 1.25rem;
+}
+
+.authModal .turnstileContainer {
+  margin: 1rem 0;
+  display: flex;
+  justify-content: center;
+  overflow: visible;
+}
+
+.authModal .turnstileContainer > div {
+  transform: none;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Hide span on mobile trigger */
+@media (max-width: 768px) {
+  .authTrigger span {
+    display: none;
+  }
+
+  .authTrigger {
+    padding: 0.5rem;
+    width: 36px;
+    height: 36px;
+    justify-content: center;
+  }
+}

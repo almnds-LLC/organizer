@@ -1,0 +1,25 @@
+{
+	"name": "api",
+	"type": "module",
+	"scripts": {
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy --minify",
+		"cf-typegen": "wrangler types --env-interface CloudflareBindings",
+		"test": "vitest",
+		"test:run": "vitest run",
+		"test:coverage": "vitest run --coverage"
+	},
+	"dependencies": {
+		"@hono/zod-validator": "^0.7.6",
+		"hono": "^4.11.3",
+		"zod": "^3.25.76"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.11.1",
+		"@types/node": "^25.0.3",
+		"@vitest/coverage-istanbul": "^3.2.4",
+		"@vitest/coverage-v8": "^4.0.16",
+		"vitest": "^3.2.4",
+		"wrangler": "^4.54.0"
+	}
+}

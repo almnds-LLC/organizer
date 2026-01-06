@@ -1,0 +1,540 @@
+/* UnifiedPanel - Desktop (side panel) */
+.unified-panel-desktop {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  z-index: 50;
+  overflow: visible; /* Allow button to show outside */
+  transform: translateX(100%);
+  transition: transform 0.25s ease, visibility 0s 0.25s;
+  will-change: transform;
+  pointer-events: none; /* Let clicks pass through to scene */
+  visibility: hidden;
+}
+
+.unified-panel-desktop.visible {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform 0.25s ease, visibility 0s 0s;
+}
+
+/* Inner panel container - handles content and background */
+.panel-inner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  background: white;
+  border-left: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: auto; /* Re-enable clicks for panel content */
+}
+
+/* Panel toggle button - inside panel wrapper, positioned outside */
+.panel-toggle-btn {
+  position: absolute;
+  top: 1rem;
+  left: -52px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  color: #6b7280;
+  z-index: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  pointer-events: auto; /* Re-enable clicks for button */
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  visibility: visible; /* Override parent's visibility: hidden */
+}
+
+.panel-toggle-btn:hover {
+  background: #f9fafb;
+  color: #111827;
+  border-color: #d1d5db;
+}
+
+
+/* Edit View Header with back button */
+.edit-view-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: white;
+}
+
+.edit-view-header h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  border-radius: 0.375rem;
+  transition: all 0.15s ease;
+}
+
+.back-button:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.edit-view-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+/* Panel content wrapper */
+.panel-content {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Panel views - stacked absolutely, instant switch */
+.panel-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.panel-view.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Slide animation between modes */
+.panel-content-slide {
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Mobile bottom sheet overrides */
+@media (max-width: 768px) {
+  .unified-panel-desktop {
+    display: none;
+  }
+}
+
+/* === Copied from EditPanel.css - Edit View Styles === */
+
+.edit-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Form styles */
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: #111827;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.form-group input::placeholder {
+  color: #9ca3af;
+}
+
+/* Compartment Editor */
+.compartment-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Section cells in preview */
+.sub-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+  min-height: 60px;
+  padding: 0.5rem;
+}
+
+.sub-section:hover:not(.editing) {
+  border-color: #93c5fd;
+}
+
+.sub-section.editing {
+  border-color: #3b82f6;
+  cursor: default;
+}
+
+/* Display mode (not editing) */
+.section-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  text-align: center;
+  min-height: 40px;
+}
+
+.section-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.section-qty {
+  font-size: 0.6875rem;
+  opacity: 0.8;
+}
+
+.section-empty {
+  color: #9ca3af;
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+/* Inline editor inside section */
+.section-inline-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  align-items: center;
+  min-height: 80px;
+}
+
+.inline-label {
+  width: calc(100% + 1rem);
+  margin: -0.5rem -0.5rem 0 -0.5rem;
+  padding: 0.625rem 0.5rem;
+  border: none;
+  border-radius: 0.375rem 0.375rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+  box-sizing: border-box;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+
+.inline-label::placeholder {
+  color: inherit;
+  opacity: 0.5;
+  font-weight: 400;
+}
+
+.inline-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: center;
+}
+
+.inline-color {
+  width: 20px;
+  height: 20px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  padding: 0;
+  font-size: 0.625rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inline-color:hover {
+  transform: scale(1.15);
+}
+
+.inline-color.active {
+  border-color: #111827;
+  box-shadow: 0 0 0 1px white;
+}
+
+.inline-color-add {
+  background: rgba(0,0,0,0.1);
+  color: rgba(0,0,0,0.5);
+  font-weight: 600;
+}
+
+.inline-qty {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+}
+
+.inline-qty input {
+  width: 40px;
+  padding: 0.25rem;
+  border: none;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  box-sizing: border-box;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+
+.inline-qty input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+.inline-qty input::placeholder {
+  color: inherit;
+  opacity: 0.5;
+}
+
+/* Structure controls section */
+.structure-controls-section {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;
+}
+
+.structure-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.structure-control-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.stepper-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.stepper-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.stepper-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stepper-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+  min-width: 24px;
+  text-align: center;
+}
+
+.layout-btns {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.layout-btn {
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.layout-btn:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.layout-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.compartment-preview {
+  display: flex;
+  gap: 4px;
+  min-height: 80px;
+  background: #374151;
+  border-radius: 0.375rem;
+  padding: 4px;
+}
+
+.compartment-preview.horizontal {
+  flex-direction: column;
+}
+
+/* Divider controls */
+.divider-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.divider-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.divider-btn:hover:not(:disabled) {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.divider-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.divider-count {
+  font-size: 0.75rem;
+  color: #6b7280;
+  min-width: 60px;
+  text-align: center;
+}
+
+/* Utility classes */
+.divider {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 1.5rem 0;
+}
+
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 1rem 0;
+}
+
+.mass-edit-info {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin: 0 0 1.5rem 0;
+  padding: 0.75rem;
+  background: #f3f4f6;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.no-selection-info {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin: 0;
+  padding: 1rem;
+  text-align: center;
+  font-style: italic;
+}
+
+.form-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.form-row .form-group {
+  flex: 1;
+}

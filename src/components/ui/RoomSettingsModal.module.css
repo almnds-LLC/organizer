@@ -1,0 +1,336 @@
+.modal {
+  max-width: 480px;
+}
+
+.error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.section {
+  padding: 1rem 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.section:first-child {
+  padding-top: 0;
+}
+
+.section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.section h3 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  margin: 0 0 0.75rem 0;
+}
+
+/* Room name */
+.roomNameEdit {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.roomNameEdit input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.roomNameEdit input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.roomNameDisplay {
+  color: #374151;
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+/* Standalone invite form */
+.inviteFormStandalone {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+}
+
+.inviteInputRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.inviteInputField {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.inviteInputField:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.inviteInputField::placeholder {
+  color: #9ca3af;
+}
+
+.inviteRoleSelect {
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  background-color: white;
+  color: #374151;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+}
+
+.inviteRoleSelect option {
+  color: #374151;
+}
+
+.inviteOptionsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.75rem;
+}
+
+/* Pending invite styling */
+.pendingInvite {
+  opacity: 0.75;
+}
+
+.pendingBadge {
+  font-size: 0.6875rem;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  margin-left: 0.375rem;
+}
+
+/* Can invite pill with switch */
+.canInvitePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem 0.125rem 0.125rem;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: #6b7280;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.canInvitePill.active {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.memberActions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Members list */
+.loadingText {
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.membersList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.memberItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+}
+
+.memberItem:not(:last-child) {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+/* Remove border from member right before invite form */
+.memberItem:has(+ .memberItem .inviteForm) {
+  border-bottom: none;
+}
+
+.memberInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.memberName {
+  font-size: 0.875rem;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.youBadge {
+  font-size: 0.6875rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+.memberRole {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.roleOwner {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.roleEditor {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.roleViewer {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.memberRemove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  color: #9ca3af;
+  transition: all 0.15s ease;
+}
+
+.memberRemove:hover:not(:disabled) {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.memberRemove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Danger zone */
+.dangerZone {
+  margin-top: 0.5rem;
+}
+
+.dangerZone h3 {
+  color: #dc2626;
+}
+
+.confirmAction {
+  background: #fef2f2;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.confirmAction p {
+  color: #991b1b;
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem 0;
+}
+
+.confirmButtons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* Confirmation overlay for removing members */
+.confirmOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  z-index: 10;
+}
+
+.confirmDialog {
+  background: white;
+  padding: 1.25rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+  max-width: 300px;
+  margin: 1rem;
+}
+
+.confirmDialog p {
+  margin: 0 0 1rem 0;
+  font-size: 0.9375rem;
+  color: #374151;
+}
+
+.confirmDialog strong {
+  color: #111827;
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+  .inviteInputRow {
+    flex-direction: column;
+  }
+
+  .inviteRoleSelect {
+    width: 100%;
+  }
+}

@@ -1,0 +1,90 @@
+.offline-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.offline-badge,
+.pending-badge,
+.error-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.offline-badge {
+  background: var(--color-warning-bg, #fef3cd);
+  color: var(--color-warning-text, #856404);
+}
+
+.pending-badge {
+  background: var(--color-info-bg, #d1ecf1);
+  color: var(--color-info-text, #0c5460);
+}
+
+.error-badge {
+  background: var(--color-error-bg, #f8d7da);
+  color: var(--color-error-text, #721c24);
+  cursor: pointer;
+}
+
+.error-badge:hover {
+  opacity: 0.8;
+}
+
+.offline-icon,
+.pending-icon,
+.error-icon {
+  display: flex;
+  align-items: center;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sync-now-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--color-primary, #007bff);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.sync-now-btn:hover {
+  opacity: 0.9;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .offline-badge {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+  }
+
+  .pending-badge {
+    background: rgba(23, 162, 184, 0.2);
+    color: #17a2b8;
+  }
+
+  .error-badge {
+    background: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+  }
+}
