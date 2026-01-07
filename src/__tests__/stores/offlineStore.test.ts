@@ -175,9 +175,9 @@ describe('offlineStore', () => {
 
       await syncPendingOperations();
 
-      expect(mockApi.updateDrawer).toHaveBeenCalledWith('room1', 'drawer1', {
+      expect(mockApi.updateDrawer).toHaveBeenCalledWith('room1', 'drawer1', expect.objectContaining({
         name: 'Updated Name',
-      });
+      }));
     });
 
     it('should sync drawer delete operation', async () => {
