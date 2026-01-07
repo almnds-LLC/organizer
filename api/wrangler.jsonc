@@ -35,6 +35,12 @@
 			"tag": "v1",
 			"new_sqlite_classes": ["RoomSync"]
 		}
+	],
+	"routes": [
+		{
+			"pattern": "organize.almnds.com/api/*",
+			"zone_name": "almnds.com"
+		}
 	]
 	/**
 	 * Smart Placement

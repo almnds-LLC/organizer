@@ -46,18 +46,17 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal server error' }, 500);
 });
 
-// Health check
-app.get('/health', (c) => c.json({ status: 'ok' }));
-
-// API routes
+// API routes under /api prefix
+// Health check for monitoring
+app.get('/api/health', (c) => c.json({ status: 'ok' }));
 // Note: wsRoutes must be registered before roomRoutes to avoid auth middleware conflict
 // on /rooms/:roomId/ws path (WS handles auth via query param, not header)
-app.route('/', wsRoutes); // WebSocket routes for real-time sync
-app.route('/auth', authRoutes);
-app.route('/rooms', roomRoutes);
-app.route('/invitations', invitationRoutes);
-app.route('/users', userRoutes);
-app.route('/', drawerRoutes); // Drawer routes have /rooms/:roomId/drawers and /drawers/:id paths
-app.route('/', categoryRoutes); // Category routes have /rooms/:roomId/categories paths
+app.route('/api', wsRoutes);
+app.route('/api/auth', authRoutes);
+app.route('/api/rooms', roomRoutes);
+app.route('/api/invitations', invitationRoutes);
+app.route('/api/users', userRoutes);
+app.route('/api', drawerRoutes);
+app.route('/api', categoryRoutes);
 
 export default app;

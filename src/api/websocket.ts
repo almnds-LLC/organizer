@@ -1,6 +1,6 @@
 import { api } from './client';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
+const API_BASE = (import.meta.env.VITE_API_URL ?? '') + '/api';
 
 // Decode JWT payload to check expiration (JWT is just base64url encoded JSON)
 function isTokenExpired(token: string, bufferSeconds = 60): boolean {
@@ -22,7 +22,7 @@ function isTokenExpired(token: string, bufferSeconds = 60): boolean {
 
 // Convert HTTP URL to WebSocket URL
 function getWsUrl(roomId: string, token: string): string {
-  const base = API_BASE.replace(/^http/, 'ws') || `ws://${window.location.host}`;
+  const base = API_BASE.replace(/^http/, 'ws') || `ws://${window.location.host}/api`;
   return `${base}/rooms/${roomId}/ws?token=${encodeURIComponent(token)}`;
 }
 

@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
+const API_BASE = (import.meta.env.VITE_API_URL ?? '') + '/api';
 
 export interface User {
   id: string;
@@ -125,7 +125,7 @@ class ApiClient {
     const response = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers,
-      credentials: 'include', // For cookies
+      credentials: 'include',
     });
 
     // Handle 401 - try to refresh token
