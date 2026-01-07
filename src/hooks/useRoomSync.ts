@@ -2,10 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { roomWebSocket, type SyncMessage } from '../api/websocket';
 import { useAuthStore } from '../store/authStore';
 import { useDrawerStore } from '../store/drawerStore';
-import { useOfflineStore } from '../store/offlineStore';
-import { useConflictStore } from '../store/conflictStore';
 import { api } from '../api/client';
-import type { Drawer, Compartment, SubCompartment, Category, StoredItem } from '../types/drawer';
+import type { Drawer, Compartment, SubCompartment, Category } from '../types/drawer';
 
 interface ConnectedUser {
   userId: string;
@@ -108,99 +106,16 @@ export function useRoomSync() {
   };
 }
 
-// Check if there's a pending operation that conflicts with the remote update
-function checkForConflict(
-  entity: 'drawer' | 'compartment' | 'subCompartment' | 'category',
-  entityId: string,
-  remoteVersion: Record<string, unknown>
-): boolean {
-  const { pendingOperations, removePendingOperation } = useOfflineStore.getState();
-  const { addConflict } = useConflictStore.getState();
-  const { drawers, categories } = useDrawerStore.getState();
-
-  // Find pending operation for this entity
-  const pendingOp = pendingOperations.find(
-    op => op.entity === entity && op.entityId === entityId && op.type === 'update'
-  );
-
-  if (!pendingOp || !pendingOp.data) return false;
-
-  // Get local version based on entity type
-  let localVersion: Record<string, unknown> = {};
-  let entityName: string | undefined;
-
-  switch (entity) {
-    case 'drawer': {
-      const drawer = drawers[entityId];
-      if (drawer) {
-        localVersion = pendingOp.data;
-        entityName = drawer.name;
-      }
-      break;
-    }
-    case 'category': {
-      const category = categories[entityId];
-      if (category) {
-        localVersion = pendingOp.data;
-        entityName = category.name;
-      }
-      break;
-    }
-    case 'subCompartment': {
-      localVersion = pendingOp.data;
-      const item = (pendingOp.data as { item?: StoredItem | null }).item;
-      entityName = item?.label;
-      break;
-    }
-    default:
-      localVersion = pendingOp.data;
-  }
-
-  // Check if local and remote versions differ
-  const localKeys = Object.keys(localVersion);
-  const hasConflict = localKeys.some(key => {
-    if (key === 'drawerId') return false; // Skip metadata
-    const localVal = JSON.stringify(localVersion[key]);
-    const remoteVal = JSON.stringify(remoteVersion[key]);
-    return localVal !== remoteVal;
-  });
-
-  if (hasConflict) {
-    // Remove the pending operation since we'll handle it via conflict resolution
-    removePendingOperation(pendingOp.id);
-
-    // Add conflict for user to resolve
-    addConflict({
-      entity,
-      entityId,
-      entityName,
-      localVersion,
-      remoteVersion,
-    });
-
-    return true;
-  }
-
-  // No conflict - remove pending operation as remote version matches
-  removePendingOperation(pendingOp.id);
-  return false;
-}
-
-// Handle incoming remote messages
+// Handle incoming remote messages - server is authoritative, always apply updates
 function handleRemoteMessage(message: SyncMessage) {
   switch (message.type) {
     case 'drawer_created':
       applyRemoteDrawerCreate(message.drawer);
       break;
 
-    case 'drawer_updated': {
-      // Check for conflict before applying
-      const hasConflict = checkForConflict('drawer', message.drawerId, message.changes);
-      if (!hasConflict) {
-        applyRemoteDrawerUpdate(message.drawerId, message.changes);
-      }
+    case 'drawer_updated':
+      applyRemoteDrawerUpdate(message.drawerId, message.changes);
       break;
-    }
 
     case 'drawer_deleted':
       applyRemoteDrawerDelete(message.drawerId);
@@ -222,18 +137,9 @@ function handleRemoteMessage(message: SyncMessage) {
       applyRemoteCompartmentSplit(message.drawerId, message.deletedId, message.newCompartments);
       break;
 
-    case 'item_updated': {
-      // Check for conflict before applying
-      const remoteVersion = {
-        drawerId: message.drawerId,
-        item: message.item,
-      };
-      const hasConflict = checkForConflict('subCompartment', message.subCompartmentId, remoteVersion);
-      if (!hasConflict) {
-        applyRemoteItemUpdate(message.drawerId, message.compartmentId, message.subCompartmentId, message.item);
-      }
+    case 'item_updated':
+      applyRemoteItemUpdate(message.drawerId, message.compartmentId, message.subCompartmentId, message.item);
       break;
-    }
 
     case 'items_batch_updated':
       applyRemoteBatchItemUpdate(message.drawerId, message.updates);
@@ -243,14 +149,9 @@ function handleRemoteMessage(message: SyncMessage) {
       applyRemoteCategoryCreate(message.category);
       break;
 
-    case 'category_updated': {
-      // Check for conflict before applying
-      const hasConflict = checkForConflict('category', message.categoryId, message.changes);
-      if (!hasConflict) {
-        applyRemoteCategoryUpdate(message.categoryId, message.changes);
-      }
+    case 'category_updated':
+      applyRemoteCategoryUpdate(message.categoryId, message.changes);
       break;
-    }
 
     case 'category_deleted':
       applyRemoteCategoryDelete(message.categoryId);

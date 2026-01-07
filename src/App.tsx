@@ -5,7 +5,6 @@ import { UnifiedPanel } from './components/ui/UnifiedPanel';
 import { AddDrawerModal } from './components/ui/AddDrawerModal';
 import { CategoryModal } from './components/ui/CategoryModal';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
-import { ConflictModal } from './components/ui/ConflictModal';
 import { CollaboratorCursors } from './components/ui/CollaboratorCursors';
 import { useAuthStore } from './store/authStore';
 import { useDrawerStore } from './store/drawerStore';
@@ -72,7 +71,6 @@ function App() {
       </div>
       <AddDrawerModal />
       <CategoryModal />
-      <ConflictModal />
       {isAuthenticated && <CollaboratorCursors />}
     </div>
   );
