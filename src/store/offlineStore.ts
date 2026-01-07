@@ -1,8 +1,29 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '../api/client';
+import { roomWebSocket } from '../api/websocket';
 import { useAuthStore } from './authStore';
-import type { StoredItem } from '../types/drawer';
+
+// Wait for WebSocket to be connected (with timeout)
+function waitForWebSocket(timeoutMs = 5000): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (roomWebSocket.isConnected()) {
+      resolve(true);
+      return;
+    }
+
+    const startTime = Date.now();
+    const checkInterval = setInterval(() => {
+      if (roomWebSocket.isConnected()) {
+        clearInterval(checkInterval);
+        resolve(true);
+      } else if (Date.now() - startTime > timeoutMs) {
+        clearInterval(checkInterval);
+        resolve(false);
+      }
+    }, 100);
+  });
+}
 
 export interface PendingOperation {
   id: string;
@@ -36,15 +57,32 @@ export const useOfflineStore = create<OfflineState>()(
       lastSyncError: null,
 
       addPendingOperation: (op) => {
-        const operation: PendingOperation = {
-          ...op,
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          retries: 0,
-        };
-        set((state) => ({
-          pendingOperations: [...state.pendingOperations, operation],
-        }));
+        set((state) => {
+          // Check if there's already a pending operation for the same entity
+          const existingIndex = state.pendingOperations.findIndex(
+            (existing) => existing.entity === op.entity && existing.entityId === op.entityId
+          );
+
+          if (existingIndex !== -1) {
+            // Update existing operation with new data
+            const updated = [...state.pendingOperations];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              data: op.data,
+              timestamp: Date.now(),
+            };
+            return { pendingOperations: updated };
+          }
+
+          // Add new operation
+          const operation: PendingOperation = {
+            ...op,
+            id: crypto.randomUUID(),
+            timestamp: Date.now(),
+            retries: 0,
+          };
+          return { pendingOperations: [...state.pendingOperations, operation] };
+        });
       },
 
       removePendingOperation: (id) => {
@@ -53,12 +91,15 @@ export const useOfflineStore = create<OfflineState>()(
         }));
       },
 
-      setOnline: (online) => {
+      setOnline: async (online) => {
         const wasOffline = !get().isOnline;
         set({ isOnline: online });
 
         // Auto-sync when coming back online
         if (online && wasOffline) {
+          // Trigger WebSocket reconnection and wait for it
+          roomWebSocket.tryReconnect();
+          await waitForWebSocket(5000);
           get().syncPendingOperations();
         }
       },
@@ -121,6 +162,8 @@ export const useOfflineStore = create<OfflineState>()(
 );
 
 async function syncOperation(op: PendingOperation, roomId: string): Promise<void> {
+  // Note: Server now handles broadcasting on all API calls, so we just call the API
+  // Include the original timestamp for conflict resolution
   switch (op.entity) {
     case 'drawer':
       if (op.type === 'create') {
@@ -132,10 +175,10 @@ async function syncOperation(op: PendingOperation, roomId: string): Promise<void
           gridY?: number;
         });
       } else if (op.type === 'update') {
-        await api.updateDrawer(roomId, op.entityId, op.data as {
-          name?: string;
-          gridX?: number;
-          gridY?: number;
+        const data = op.data as { name?: string; gridX?: number; gridY?: number; updatedAt?: number };
+        await api.updateDrawer(roomId, op.entityId, {
+          ...data,
+          updatedAt: data.updatedAt ?? op.timestamp, // Use stored timestamp for conflict resolution
         });
       } else if (op.type === 'delete') {
         await api.deleteDrawer(roomId, op.entityId);
@@ -144,9 +187,10 @@ async function syncOperation(op: PendingOperation, roomId: string): Promise<void
 
     case 'compartment':
       if (op.type === 'update') {
-        const data = op.data as { drawerId: string; dividerOrientation?: 'horizontal' | 'vertical' };
+        const data = op.data as { drawerId: string; dividerOrientation?: 'horizontal' | 'vertical'; updatedAt?: number };
         await api.updateCompartment(data.drawerId, op.entityId, {
           dividerOrientation: data.dividerOrientation,
+          updatedAt: data.updatedAt ?? op.timestamp,
         });
       }
       break;
@@ -155,28 +199,28 @@ async function syncOperation(op: PendingOperation, roomId: string): Promise<void
       if (op.type === 'update') {
         const data = op.data as {
           drawerId: string;
-          item: StoredItem | null;
+          compartmentId: string;
+          item: { label: string; categoryId?: string; quantity?: number } | null;
+          updatedAt?: number;
         };
         await api.updateSubCompartment(data.drawerId, op.entityId, {
           itemLabel: data.item?.label ?? null,
           itemCategoryId: data.item?.categoryId ?? null,
           itemQuantity: data.item?.quantity ?? null,
+          updatedAt: data.updatedAt ?? op.timestamp,
         });
       }
       break;
 
     case 'category':
       if (op.type === 'create') {
-        await api.createCategory(roomId, op.data as {
-          name: string;
-          colorIndex?: number;
-          color?: string;
-        });
+        const data = op.data as { name: string; colorIndex?: number; color?: string };
+        await api.createCategory(roomId, data);
       } else if (op.type === 'update') {
-        await api.updateCategory(roomId, op.entityId, op.data as {
-          name?: string;
-          colorIndex?: number;
-          color?: string;
+        const data = op.data as { name?: string; colorIndex?: number; color?: string; updatedAt?: number };
+        await api.updateCategory(roomId, op.entityId, {
+          ...data,
+          updatedAt: data.updatedAt ?? op.timestamp,
         });
       } else if (op.type === 'delete') {
         await api.deleteCategory(roomId, op.entityId);

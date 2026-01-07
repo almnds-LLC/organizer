@@ -190,11 +190,21 @@ export class DrawerRepository implements IDrawerRepository {
     };
   }
 
-  async update(id: string, input: UpdateDrawerInput): Promise<Drawer> {
+  async update(id: string, input: UpdateDrawerInput): Promise<Drawer | null> {
     const drawer = await this.findById(id);
     if (!drawer) throw new NotFoundError('Drawer not found');
 
-    const now = new Date().toISOString();
+    // Timestamp-based conflict resolution: skip if incoming update is older
+    if (input.updatedAt !== undefined) {
+      const storedTime = new Date(drawer.updatedAt).getTime();
+      if (input.updatedAt < storedTime) {
+        return null; // Skip - incoming update is older
+      }
+    }
+
+    const timestamp = input.updatedAt
+      ? new Date(input.updatedAt).toISOString()
+      : new Date().toISOString();
     const updates: string[] = [];
     const values: (string | number)[] = [];
 
@@ -225,7 +235,7 @@ export class DrawerRepository implements IDrawerRepository {
     if (updates.length === 0) return drawer;
 
     updates.push('updated_at = ?');
-    values.push(now);
+    values.push(timestamp);
     values.push(id);
 
     await this.db
@@ -240,7 +250,7 @@ export class DrawerRepository implements IDrawerRepository {
       cols: input.cols ?? drawer.cols,
       gridX: input.gridX ?? drawer.gridX,
       gridY: input.gridY ?? drawer.gridY,
-      updatedAt: now,
+      updatedAt: timestamp,
     };
   }
 
@@ -269,22 +279,32 @@ export class CompartmentRepository implements ICompartmentRepository {
     return row ? mapRowToCompartment(row) : null;
   }
 
-  async update(id: string, input: UpdateCompartmentInput): Promise<Compartment> {
+  async update(id: string, input: UpdateCompartmentInput): Promise<Compartment | null> {
     const comp = await this.findById(id);
     if (!comp) throw new NotFoundError('Compartment not found');
 
+    // Timestamp-based conflict resolution: skip if incoming update is older
+    if (input.updatedAt !== undefined) {
+      const storedTime = new Date(comp.updatedAt).getTime();
+      if (input.updatedAt < storedTime) {
+        return null; // Skip - incoming update is older
+      }
+    }
+
     if (input.dividerOrientation === undefined) return comp;
 
-    const now = new Date().toISOString();
+    const timestamp = input.updatedAt
+      ? new Date(input.updatedAt).toISOString()
+      : new Date().toISOString();
     await this.db
       .prepare('UPDATE compartments SET divider_orientation = ?, updated_at = ? WHERE id = ?')
-      .bind(input.dividerOrientation, now, id)
+      .bind(input.dividerOrientation, timestamp, id)
       .run();
 
     return {
       ...comp,
       dividerOrientation: input.dividerOrientation,
-      updatedAt: now,
+      updatedAt: timestamp,
     };
   }
 
@@ -670,11 +690,21 @@ export class SubCompartmentRepository implements ISubCompartmentRepository {
     return row ? mapRowToSubCompartment(row) : null;
   }
 
-  async update(id: string, input: UpdateSubCompartmentInput): Promise<SubCompartment> {
+  async update(id: string, input: UpdateSubCompartmentInput): Promise<SubCompartment | null> {
     const sub = await this.findById(id);
     if (!sub) throw new NotFoundError('Sub-compartment not found');
 
-    const now = new Date().toISOString();
+    // Timestamp-based conflict resolution: skip if incoming update is older
+    if (input.updatedAt !== undefined) {
+      const storedTime = new Date(sub.updatedAt).getTime();
+      if (input.updatedAt < storedTime) {
+        return null; // Skip - incoming update is older
+      }
+    }
+
+    const timestamp = input.updatedAt
+      ? new Date(input.updatedAt).toISOString()
+      : new Date().toISOString();
     const updates: string[] = [];
     const values: (string | number | null)[] = [];
 
@@ -698,7 +728,7 @@ export class SubCompartmentRepository implements ISubCompartmentRepository {
     if (updates.length === 0) return sub;
 
     updates.push('updated_at = ?');
-    values.push(now);
+    values.push(timestamp);
     values.push(id);
 
     await this.db
@@ -712,7 +742,7 @@ export class SubCompartmentRepository implements ISubCompartmentRepository {
       itemLabel: input.itemLabel !== undefined ? input.itemLabel : sub.itemLabel,
       itemCategoryId: input.itemCategoryId !== undefined ? input.itemCategoryId : sub.itemCategoryId,
       itemQuantity: input.itemQuantity !== undefined ? input.itemQuantity : sub.itemQuantity,
-      updatedAt: now,
+      updatedAt: timestamp,
     };
   }
 

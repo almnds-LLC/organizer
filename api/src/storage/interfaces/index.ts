@@ -67,14 +67,14 @@ export interface IDrawerRepository {
   findByRoom(roomId: string): Promise<Drawer[]>;
   findByIdWithCompartments(id: string): Promise<DrawerWithCompartments | null>;
   create(roomId: string, input: CreateDrawerInput): Promise<DrawerWithCompartments>;
-  update(id: string, input: UpdateDrawerInput): Promise<Drawer>;
+  update(id: string, input: UpdateDrawerInput): Promise<Drawer | null>; // null if skipped due to older timestamp
   delete(id: string): Promise<void>;
   reorder(roomId: string, drawerIds: string[]): Promise<void>;
 }
 
 export interface ICompartmentRepository {
   findById(id: string): Promise<Compartment | null>;
-  update(id: string, input: UpdateCompartmentInput): Promise<Compartment>;
+  update(id: string, input: UpdateCompartmentInput): Promise<Compartment | null>; // null if skipped
   setDividerCount(compartmentId: string, count: number): Promise<SubCompartment[]>;
   merge(drawerId: string, compartmentIds: string[]): Promise<{ compartment: Compartment; subCompartments: SubCompartment[] }>;
   split(compartmentId: string): Promise<Array<{ compartment: Compartment; subCompartments: SubCompartment[] }>>;
@@ -82,7 +82,7 @@ export interface ICompartmentRepository {
 
 export interface ISubCompartmentRepository {
   findById(id: string): Promise<SubCompartment | null>;
-  update(id: string, input: UpdateSubCompartmentInput): Promise<SubCompartment>;
+  update(id: string, input: UpdateSubCompartmentInput): Promise<SubCompartment | null>; // null if skipped
   updateBatch(updates: Array<{ id: string; input: UpdateSubCompartmentInput }>): Promise<void>;
 }
 
@@ -90,6 +90,6 @@ export interface ICategoryRepository {
   findById(id: string): Promise<Category | null>;
   findByRoom(roomId: string): Promise<Category[]>;
   create(roomId: string, input: CreateCategoryInput): Promise<Category>;
-  update(id: string, input: UpdateCategoryInput): Promise<Category>;
+  update(id: string, input: UpdateCategoryInput): Promise<Category | null>; // null if skipped
   delete(id: string): Promise<void>;
 }

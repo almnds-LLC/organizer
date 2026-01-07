@@ -53,11 +53,21 @@ export class CategoryRepository implements ICategoryRepository {
     };
   }
 
-  async update(id: string, input: UpdateCategoryInput): Promise<Category> {
+  async update(id: string, input: UpdateCategoryInput): Promise<Category | null> {
     const category = await this.findById(id);
     if (!category) throw new NotFoundError('Category not found');
 
-    const now = new Date().toISOString();
+    // Timestamp-based conflict resolution: skip if incoming update is older
+    if (input.updatedAt !== undefined) {
+      const storedTime = new Date(category.updatedAt).getTime();
+      if (input.updatedAt < storedTime) {
+        return null; // Skip - incoming update is older
+      }
+    }
+
+    const timestamp = input.updatedAt
+      ? new Date(input.updatedAt).toISOString()
+      : new Date().toISOString();
     const updates: string[] = [];
     const values: (string | number | null)[] = [];
 
@@ -77,7 +87,7 @@ export class CategoryRepository implements ICategoryRepository {
     if (updates.length === 0) return category;
 
     updates.push('updated_at = ?');
-    values.push(now);
+    values.push(timestamp);
     values.push(id);
 
     await this.db
@@ -90,7 +100,7 @@ export class CategoryRepository implements ICategoryRepository {
       name: input.name ?? category.name,
       colorIndex: input.colorIndex !== undefined ? input.colorIndex : category.colorIndex,
       color: input.color !== undefined ? input.color : category.color,
-      updatedAt: now,
+      updatedAt: timestamp,
     };
   }
 

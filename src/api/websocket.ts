@@ -334,6 +334,20 @@ class RoomWebSocket {
   getConnectedUsers(): ConnectedUser[] {
     return Array.from(this.connectedUsers.values());
   }
+
+  // Try to reconnect immediately (e.g., when browser comes back online)
+  tryReconnect(): void {
+    if (this.isConnected() || !this.roomId || this.authFailed) {
+      return;
+    }
+    // Clear any pending reconnect timeout and try immediately
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    this.reconnectAttempts = 0;
+    this.connect(this.roomId);
+  }
 }
 
 export const roomWebSocket = new RoomWebSocket();

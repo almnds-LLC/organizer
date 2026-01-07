@@ -148,6 +148,7 @@ export interface UpdateDrawerInput {
   cols?: number;
   gridX?: number;
   gridY?: number;
+  updatedAt?: number; // Client timestamp (epoch ms) for conflict resolution
 }
 
 export interface CreateCategoryInput {
@@ -160,10 +161,12 @@ export interface UpdateCategoryInput {
   name?: string;
   colorIndex?: number | null;
   color?: string | null;
+  updatedAt?: number; // Client timestamp (epoch ms) for conflict resolution
 }
 
 export interface UpdateCompartmentInput {
   dividerOrientation?: DividerOrientation;
+  updatedAt?: number; // Client timestamp (epoch ms) for conflict resolution
 }
 
 export interface UpdateSubCompartmentInput {
@@ -171,6 +174,7 @@ export interface UpdateSubCompartmentInput {
   itemLabel?: string | null;
   itemCategoryId?: string | null;
   itemQuantity?: number | null;
+  updatedAt?: number; // Client timestamp (epoch ms) for conflict resolution
 }
 
 export interface InviteToRoomInput {

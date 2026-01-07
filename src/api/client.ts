@@ -273,6 +273,7 @@ class ApiClient {
     name?: string;
     gridX?: number;
     gridY?: number;
+    updatedAt?: number;
   }): Promise<ApiDrawer> {
     const response = await this.fetch<{ drawer: ApiDrawer }>(`/rooms/${roomId}/drawers/${drawerId}`, {
       method: 'PATCH',
@@ -288,6 +289,7 @@ class ApiClient {
   // Compartment endpoints
   async updateCompartment(drawerId: string, compartmentId: string, input: {
     dividerOrientation?: 'horizontal' | 'vertical';
+    updatedAt?: number;
   }): Promise<ApiCompartment> {
     const response = await this.fetch<{ compartment: ApiCompartment }>(`/drawers/${drawerId}/compartments/${compartmentId}`, {
       method: 'PATCH',
@@ -308,6 +310,7 @@ class ApiClient {
     itemLabel?: string | null;
     itemCategoryId?: string | null;
     itemQuantity?: number | null;
+    updatedAt?: number;
   }): Promise<ApiSubCompartment> {
     const response = await this.fetch<{ subCompartment: ApiSubCompartment }>(`/drawers/${drawerId}/sub-compartments/${subCompartmentId}`, {
       method: 'PATCH',
@@ -368,6 +371,7 @@ class ApiClient {
     name?: string;
     colorIndex?: number;
     color?: string;
+    updatedAt?: number;
   }): Promise<ApiCategory> {
     const response = await this.fetch<{ category: ApiCategory }>(`/rooms/${roomId}/categories/${categoryId}`, {
       method: 'PATCH',
