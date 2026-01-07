@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDrawerStore, getCategoryColor } from '../../store/drawerStore';
 import type { Category, Drawer, Compartment, SubCompartment } from '../../types/drawer';
+import type { RoomWithDrawers } from '../../api/client';
 
 // Mock the api client
 vi.mock('../../api/client', () => ({
@@ -937,7 +938,7 @@ describe('drawerStore', () => {
         ],
       };
 
-      useDrawerStore.getState().loadFromApi(apiRoom as any);
+      useDrawerStore.getState().loadFromApi(apiRoom as unknown as RoomWithDrawers);
 
       const state = useDrawerStore.getState();
       expect(state.drawerOrder).toContain('drawer1');
@@ -954,7 +955,7 @@ describe('drawerStore', () => {
         categories: [],
       };
 
-      useDrawerStore.getState().loadFromApi(apiRoom as any);
+      useDrawerStore.getState().loadFromApi(apiRoom as unknown as RoomWithDrawers);
 
       const state = useDrawerStore.getState();
       expect(state.drawerOrder).toHaveLength(0);

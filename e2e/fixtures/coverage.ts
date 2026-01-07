@@ -6,6 +6,7 @@ const coverageDir = path.join(process.cwd(), 'coverage-e2e');
 
 export const test = base.extend({
   page: async ({ page }, use) => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- 'use' is Playwright API, not React hook
     await use(page);
 
     // Collect coverage after each test

@@ -64,7 +64,6 @@ export const useOfflineStore = create<OfflineState>()(
           );
 
           if (existingIndex !== -1) {
-            // Update existing operation with new data
             const updated = [...state.pendingOperations];
             updated[existingIndex] = {
               ...updated[existingIndex],
@@ -74,7 +73,6 @@ export const useOfflineStore = create<OfflineState>()(
             return { pendingOperations: updated };
           }
 
-          // Add new operation
           const operation: PendingOperation = {
             ...op,
             id: crypto.randomUUID(),

@@ -89,7 +89,7 @@ export class RoomSync implements DurableObject {
         return new Response(JSON.stringify({ success: true }), {
           headers: { 'Content-Type': 'application/json' },
         });
-      } catch (error) {
+      } catch {
         return new Response(JSON.stringify({ error: 'Invalid message' }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' },

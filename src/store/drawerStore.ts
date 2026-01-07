@@ -381,7 +381,6 @@ export const useDrawerStore = create<DrawerStore>()(
               gridY,
             });
 
-            // Transform API response to local format
             const compartments: Record<string, Compartment> = {};
             for (const apiComp of apiDrawer.compartments) {
               compartments[apiComp.id] = {
@@ -424,7 +423,6 @@ export const useDrawerStore = create<DrawerStore>()(
             console.error('Failed to create drawer:', error);
           }
         } else {
-          // Local mode - create locally
           const newDrawer = createDrawer({ ...options, gridX, gridY });
           set((state) => ({
             drawers: { ...state.drawers, [newDrawer.id]: newDrawer },
@@ -661,7 +659,6 @@ export const useDrawerStore = create<DrawerStore>()(
             console.error('Failed to create category:', error);
           }
         } else {
-          // Local mode
           const id = generateId();
           const category: Category = { id, name };
           if (typeof colorOrIndex === 'number') {

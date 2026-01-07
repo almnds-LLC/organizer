@@ -169,10 +169,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return false;
       }
 
-      // Get user info
       const { user } = await api.getMe();
-
-      // Load rooms
       const rooms = await api.getRooms();
 
       // Try to restore last viewed room, fall back to user's own default room
@@ -343,7 +340,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (!drawer) continue;
 
         try {
-          // Create drawer
           const newDrawer = await api.createDrawer(currentRoomId, {
             name: drawer.name,
             rows: drawer.rows,
@@ -361,13 +357,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               item: { label: string; categoryId?: string; quantity?: number } | null;
             }>;
           }>) {
-            // Find matching compartment in new drawer
             const newCompartment = newDrawer.compartments.find(
               c => c.row === (compartment as unknown as { row: number }).row && c.col === (compartment as unknown as { col: number }).col
             );
             if (!newCompartment) continue;
 
-            // Update orientation if needed
             if (compartment.dividerOrientation !== 'horizontal') {
               await api.updateCompartment(newDrawer.id, newCompartment.id, {
                 dividerOrientation: compartment.dividerOrientation,
