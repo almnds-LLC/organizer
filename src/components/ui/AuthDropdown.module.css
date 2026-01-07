@@ -123,11 +123,6 @@
   margin-top: 0.25rem;
 }
 
-/* Turnstile widget container */
-.turnstileContainer {
-  margin-bottom: 1rem;
-}
-
 /* Error message */
 .authError {
   color: #dc2626;
@@ -137,6 +132,10 @@
   background: #fef2f2;
   border-radius: 0.375rem;
   border: 1px solid #fecaca;
+}
+
+.turnstileContainer {
+  margin-bottom: 1rem;
 }
 
 /* Submit button */
@@ -261,18 +260,6 @@
 
 .authModal .formGroup {
   margin-bottom: 1.25rem;
-}
-
-.authModal .turnstileContainer {
-  display: flex;
-  justify-content: center;
-  margin: 1rem 0;
-}
-
-.authModal .turnstileContainer > div {
-  transform: none;
-  width: 100%;
-  max-width: 100%;
 }
 
 /* Hide span on mobile trigger */

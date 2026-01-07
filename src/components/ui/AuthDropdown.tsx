@@ -14,7 +14,9 @@ export function AuthDropdown() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [turnstileHeight, setTurnstileHeight] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const turnstileRef = useRef<HTMLDivElement>(null);
 
   const { login, register, isLoading } = useAuthStore();
   const isMobile = useIsMobile();
@@ -27,6 +29,22 @@ export function AuthDropdown() {
     setTurnstileToken(null);
     setTurnstileKey((k) => k + 1);
   }, []);
+
+  // Track Turnstile height with ResizeObserver for negative margin trick
+  useEffect(() => {
+    const el = turnstileRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setTurnstileHeight(entry.contentRect.height);
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -126,17 +144,24 @@ export function AuthDropdown() {
         </div>
 
 
+        <div
+          ref={turnstileRef}
+          className={styles.turnstileContainer}
+          style={{
+            marginBottom: turnstileHeight >= 65 ? undefined : -turnstileHeight,
+          }}
+        >
           <Turnstile
             key={turnstileKey}
             sitekey={siteKey}
             onVerify={(token: string) => setTurnstileToken(token)}
             onExpire={() => setTurnstileToken(null)}
             onError={() => setTurnstileToken(null)}
-            className={styles.turnstileContainer}
-            appearance="interaction-only"
+            // appearance="interaction-only"
             size="flexible"
             theme="light"
           />
+        </div>
 
         {error && <p className={styles.authError}>{error}</p>}
 
