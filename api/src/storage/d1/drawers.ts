@@ -397,31 +397,46 @@ export class CompartmentRepository implements ICompartmentRepository {
 
     const compartments = compartmentRows.results.map(mapRowToCompartment);
 
-    // Verify all are 1x1 cells
+    // Get all cells occupied by all selected compartments
+    const allCells: Array<{ row: number; col: number }> = [];
     for (const comp of compartments) {
-      if ((comp.rowSpan ?? 1) !== 1 || (comp.colSpan ?? 1) !== 1) {
-        throw new Error('Can only merge single-cell compartments');
+      const compRowSpan = comp.rowSpan ?? 1;
+      const compColSpan = comp.colSpan ?? 1;
+      for (let r = 0; r < compRowSpan; r++) {
+        for (let c = 0; c < compColSpan; c++) {
+          allCells.push({ row: comp.row + r, col: comp.col + c });
+        }
       }
     }
 
-    // Calculate bounding box
-    let minRow = compartments[0].row;
-    let maxRow = compartments[0].row;
-    let minCol = compartments[0].col;
-    let maxCol = compartments[0].col;
-    for (const comp of compartments) {
-      minRow = Math.min(minRow, comp.row);
-      maxRow = Math.max(maxRow, comp.row);
-      minCol = Math.min(minCol, comp.col);
-      maxCol = Math.max(maxCol, comp.col);
+    // Calculate bounding box from all cells
+    let minRow = allCells[0].row;
+    let maxRow = allCells[0].row;
+    let minCol = allCells[0].col;
+    let maxCol = allCells[0].col;
+    for (const cell of allCells) {
+      minRow = Math.min(minRow, cell.row);
+      maxRow = Math.max(maxRow, cell.row);
+      minCol = Math.min(minCol, cell.col);
+      maxCol = Math.max(maxCol, cell.col);
     }
 
     const rowSpan = maxRow - minRow + 1;
     const colSpan = maxCol - minCol + 1;
 
-    // Verify it forms a rectangle
-    if (compartmentIds.length !== rowSpan * colSpan) {
+    // Verify cells form a complete rectangle (no gaps)
+    const expectedCellCount = rowSpan * colSpan;
+    const cellSet = new Set(allCells.map(c => `${c.row},${c.col}`));
+    if (cellSet.size !== expectedCellCount) {
       throw new Error('Selection must form a rectangle');
+    }
+    // Also verify all expected cells are present
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        if (!cellSet.has(`${r},${c}`)) {
+          throw new Error('Selection must form a rectangle');
+        }
+      }
     }
 
     // Find anchor (top-left) compartment

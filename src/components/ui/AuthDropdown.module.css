@@ -128,6 +128,8 @@
   /* Container collapses but allows overflow for when widget appears */
   height: 0;
   overflow: visible;
+  position: relative;
+  z-index: 10;
   transition: height 0.2s ease, margin 0.2s ease;
 }
 
