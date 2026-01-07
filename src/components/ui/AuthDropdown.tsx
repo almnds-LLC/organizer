@@ -133,7 +133,7 @@ export function AuthDropdown() {
             onExpire={() => setTurnstileToken(null)}
             onError={() => setTurnstileToken(null)}
             className={styles.turnstileContainer}
-            // appearance="interaction-only"
+            appearance="interaction-only"
             size="flexible"
             theme="light"
           />
