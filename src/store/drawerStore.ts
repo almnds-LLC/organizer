@@ -34,6 +34,11 @@ import {
   STORAGE_KEY,
   COLOR_PRESETS,
 } from '../constants/defaults';
+import {
+  canMergeCompartments,
+  getOccupiedCells,
+  getBoundingBox,
+} from '../utils/compartmentHelpers';
 
 function generateId(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -840,37 +845,24 @@ export const useDrawerStore = create<DrawerStore>()(
         const compartmentIds = Array.from(selectedCompartmentIds);
         const compartments = compartmentIds.map(id => drawer.compartments[id]).filter(Boolean);
 
-        // Validate all are 1x1 cells
-        if (compartments.some(c => (c.rowSpan ?? 1) !== 1 || (c.colSpan ?? 1) !== 1)) {
-          console.error('Can only merge single-cell compartments');
+        // Validate merge using helper (checks rectangle formation)
+        const validation = canMergeCompartments(drawer.compartments, selectedCompartmentIds);
+        if (!validation.valid) {
+          console.error(validation.error);
           return;
         }
 
-        // Calculate bounding box
-        let minRow = compartments[0].row;
-        let maxRow = compartments[0].row;
-        let minCol = compartments[0].col;
-        let maxCol = compartments[0].col;
-        for (const comp of compartments) {
-          minRow = Math.min(minRow, comp.row);
-          maxRow = Math.max(maxRow, comp.row);
-          minCol = Math.min(minCol, comp.col);
-          maxCol = Math.max(maxCol, comp.col);
-        }
-
-        // Verify it forms a rectangle
-        if (compartmentIds.length !== (maxRow - minRow + 1) * (maxCol - minCol + 1)) {
-          console.error('Selection must form a rectangle');
-          return;
-        }
+        // Get all cells occupied by selected compartments
+        const allCells = compartments.flatMap(c => getOccupiedCells(c));
+        const bbox = getBoundingBox(allCells);
 
         // Find anchor (top-left) compartment
-        const anchor = compartments.find(c => c.row === minRow && c.col === minCol);
+        const anchor = compartments.find(c => c.row === bbox.minRow && c.col === bbox.minCol);
         if (!anchor) return;
 
         const toDeleteIds = compartmentIds.filter(id => id !== anchor.id);
-        const rowSpan = maxRow - minRow + 1;
-        const colSpan = maxCol - minCol + 1;
+        const rowSpan = bbox.maxRow - bbox.minRow + 1;
+        const colSpan = bbox.maxCol - bbox.minCol + 1;
 
         // Collect all items from compartments being merged
         const allItems = compartments

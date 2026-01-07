@@ -123,12 +123,18 @@
   margin-top: 0.25rem;
 }
 
-/* Turnstile - only takes up space when widget is visible (interaction-only mode) */
+/* Turnstile - interaction-only mode collapses when not needed */
 .turnstileContainer {
-  /* No fixed height - let it collapse when empty */
+  /* Container collapses but allows overflow for when widget appears */
+  height: 0;
+  overflow: visible;
+  transition: height 0.2s ease, margin 0.2s ease;
 }
 
-.turnstileContainer:not(:empty) {
+/* When turnstile needs interaction, it adds content that makes the iframe visible */
+.turnstileContainer:has(iframe[style*="visibility: visible"]),
+.turnstileContainer:has(iframe:not([style*="visibility: hidden"])) {
+  height: 65px;
   margin-bottom: 1rem;
 }
 
@@ -270,10 +276,13 @@
 .authModal .turnstileContainer {
   display: flex;
   justify-content: center;
+  height: 0;
   overflow: visible;
 }
 
-.authModal .turnstileContainer:not(:empty) {
+.authModal .turnstileContainer:has(iframe[style*="visibility: visible"]),
+.authModal .turnstileContainer:has(iframe:not([style*="visibility: hidden"])) {
+  height: 65px;
   margin: 1rem 0;
 }
 
