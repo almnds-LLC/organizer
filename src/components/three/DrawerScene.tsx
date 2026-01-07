@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { DrawerGrid } from './DrawerGrid';
 import { CameraController } from './CameraController';
 import { CursorTracker, CursorProjector } from './CollaboratorCursors3D';
+import { TouchInterceptor } from './TouchInterceptor';
 import { useDrawerStore } from '../../store/drawerStore';
 import type { Drawer } from '../../types/drawer';
 import {
@@ -436,6 +437,7 @@ function SceneContent({ drawers, bounds, initialCenter }: {
           maxY: bounds.maxY,
         }}
       />
+      <TouchInterceptor />
 
       <BackgroundPlane
         bounds={bounds}

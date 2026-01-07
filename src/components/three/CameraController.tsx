@@ -1,8 +1,9 @@
 import { MapControls } from '@react-three/drei';
 import { useRef, useEffect, useCallback } from 'react';
-import { useThree } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber';
 import type { OrbitControls as OrbitControlsType } from 'three-stdlib';
 import * as THREE from 'three';
+import { cameraControlsState, setCameraControlsRef } from '../../utils/cameraControlsRef';
 
 const CAMERA_STORAGE_KEY = 'drawer-organizer-pan';
 
@@ -50,6 +51,24 @@ export function CameraController({ initialCenter, isDragging = false, sceneBound
   const { camera } = useThree();
   const initializedRef = useRef(false);
   const allowSaveRef = useRef(false);
+
+  // Register controls ref for synchronous access from other components
+  useEffect(() => {
+    if (controlsRef.current) {
+      setCameraControlsRef(controlsRef.current);
+    }
+    return () => setCameraControlsRef(null);
+  }, []);
+
+  // Check shared state every frame and imperatively enable/disable controls
+  useFrame(() => {
+    if (controlsRef.current) {
+      const shouldBlock = cameraControlsState.blockPan || isDragging;
+      if (controlsRef.current.enabled === shouldBlock) {
+        controlsRef.current.enabled = !shouldBlock;
+      }
+    }
+  });
 
   // Clamp position to scene bounds with padding
   const clampToSceneBounds = useCallback((x: number, y: number): { x: number; y: number } => {
@@ -201,7 +220,6 @@ export function CameraController({ initialCenter, isDragging = false, sceneBound
     <MapControls
       ref={controlsRef}
       enableRotate={false}
-      enablePan={!isDragging}
       enableZoom={true}
       minZoom={20}
       maxZoom={150}

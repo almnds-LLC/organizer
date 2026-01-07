@@ -1,9 +1,11 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import { Pencil } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useMediaQuery';
+import { setBlockCameraPan } from '../../utils/cameraControlsRef';
 import type { Compartment } from '../../types/drawer';
 import { useDrawerStore, getCategoryColor } from '../../store/drawerStore';
 import { useCursorStore } from '../../store/cursorStore';
@@ -25,11 +27,17 @@ interface CompartmentMeshProps {
 
 const OPEN_DISTANCE = 0.6;
 
+const LONG_PRESS_DURATION = 400; // ms for long-press gesture
+
 export function CompartmentMesh({ compartment, drawerId, totalRows }: CompartmentMeshProps) {
   const [hovered, setHovered] = useState(false);
   const groupRef = useRef<THREE.Group>(null);
   const slideProgress = useRef(0);
   const lastClickTimeRef = useRef(0);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const pointerStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const isMobile = useIsMobile();
 
   const {
     selectedCompartmentIds,
@@ -42,13 +50,18 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
     navigateToItem,
     activeDrawerId,
     setHoveredCompartment,
+    rectangleSelectStart,
+    setRectangleSelectStart,
+    updateRectangleSelect,
+    completeRectangleSelect,
   } = useDrawerStore();
 
   const remoteCursors = useCursorStore((s) => s.remoteCursors);
 
   const isSelected = selectedCompartmentIds.has(compartment.id);
   const isSearchMatch = searchMatchIds.has(compartment.id);
-  const isSingleSelected = isSelected && selectedCompartmentIds.size === 1;
+  // Don't show single-select UI (popup/animation) during rectangle selection
+  const isSingleSelected = isSelected && selectedCompartmentIds.size === 1 && !rectangleSelectStart;
 
   // Find collaborator hovering on this compartment or has it selected
   const collaboratorOnThis = useMemo(() => {
@@ -59,6 +72,15 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
       )
     );
   }, [remoteCursors, drawerId, compartment.id]);
+
+  // Cleanup long-press timer on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+      }
+    };
+  }, []);
 
   useFrame((_, delta) => {
     const target = isSingleSelected ? 1 : 0;
@@ -116,10 +138,112 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
     navigateToItem(drawerId, compartment.id);
   }, [compartment.id, drawerId, navigateToItem]);
 
+  // Start rectangle drag selection (mobile long-press)
+  // Uses lastSelectedPosition if there's an active selection, otherwise starts from current compartment
+  const startRectangleSelect = useCallback(() => {
+    const isSameDrawer = activeDrawerId === drawerId;
+    const hasActiveSelection = selectedCompartmentIds.size > 0;
+    let startRow: number;
+    let startCol: number;
+
+    if (hasActiveSelection && lastSelectedPosition && isSameDrawer) {
+      // Use the previously selected position as the start point
+      startRow = lastSelectedPosition.row;
+      startCol = lastSelectedPosition.col;
+    } else {
+      // No current selection - start from current compartment
+      startRow = compartment.row;
+      startCol = compartment.col;
+    }
+
+    setRectangleSelectStart({
+      row: startRow,
+      col: startCol,
+      drawerId,
+    });
+
+    // Immediately select from start to current position
+    updateRectangleSelect(compartment.row, compartment.col);
+  }, [compartment.row, compartment.col, drawerId, activeDrawerId, selectedCompartmentIds.size, lastSelectedPosition, setRectangleSelectStart, updateRectangleSelect]);
+
+  // Handle pointer down - start long-press timer on mobile
+  const handlePointerDown = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      e.stopPropagation();
+      // Prevent default to avoid text selection on long-press
+      e.nativeEvent.preventDefault();
+
+      pointerStartPosRef.current = { x: e.clientX, y: e.clientY };
+      longPressTriggeredRef.current = false;
+
+      // Start long-press timer on mobile for rectangle selection
+      if (isMobile) {
+        // Immediately disable camera panning (synchronous)
+        setBlockCameraPan(true);
+
+        longPressTimerRef.current = setTimeout(() => {
+          longPressTriggeredRef.current = true;
+          startRectangleSelect();
+        }, LONG_PRESS_DURATION);
+      }
+    },
+    [isMobile, startRectangleSelect]
+  );
+
+  // Handle pointer move - cancel long-press if moved too far
+  const handlePointerMove = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      if (!pointerStartPosRef.current || !longPressTimerRef.current) return;
+
+      const dx = Math.abs(e.clientX - pointerStartPosRef.current.x);
+      const dy = Math.abs(e.clientY - pointerStartPosRef.current.y);
+
+      // Cancel long-press if finger moved more than 10px (user is panning)
+      if (dx > 10 || dy > 10) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+        // Re-enable camera panning since user wants to pan
+        if (isMobile) {
+          setBlockCameraPan(false);
+        }
+      }
+    },
+    [isMobile]
+  );
+
   // Use pointer-based click detection for consistent touch behavior
   const handlePointerUp = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
       e.stopPropagation();
+
+      // Re-enable camera panning
+      if (isMobile) {
+        setBlockCameraPan(false);
+      }
+
+      // Clear long-press timer
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+
+      // If rectangle selection is in progress, complete it
+      if (rectangleSelectStart && rectangleSelectStart.drawerId === drawerId) {
+        completeRectangleSelect();
+        longPressTriggeredRef.current = false;
+        pointerStartPosRef.current = null;
+        return;
+      }
+
+      // If long-press was triggered but no rectangle selection, clear state
+      if (longPressTriggeredRef.current) {
+        longPressTriggeredRef.current = false;
+        pointerStartPosRef.current = null;
+        return;
+      }
+
+      pointerStartPosRef.current = null;
+
       const now = Date.now();
       const timeSinceLastClick = now - lastClickTimeRef.current;
 
@@ -133,7 +257,7 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
 
       lastClickTimeRef.current = now;
     },
-    [doSingleClick, doDoubleClick]
+    [doSingleClick, doDoubleClick, isMobile, rectangleSelectStart, drawerId, completeRectangleSelect]
   );
 
   const hasContents = compartment.subCompartments.some((sc) => sc.item);
@@ -150,18 +274,33 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
   const wallThickness = 0.02;
 
   const frontMeshEvents = {
-    onPointerDown: (e: ThreeEvent<PointerEvent>) => e.stopPropagation(),
+    onPointerDown: handlePointerDown,
+    onPointerMove: handlePointerMove,
     onPointerUp: handlePointerUp,
     onPointerOver: (e: ThreeEvent<PointerEvent>) => {
       e.stopPropagation();
       setHovered(true);
       setHoveredCompartment(compartment.id);
       document.body.style.cursor = 'pointer';
+
+      // Update rectangle selection in real-time during drag
+      if (rectangleSelectStart && rectangleSelectStart.drawerId === drawerId) {
+        updateRectangleSelect(compartment.row, compartment.col);
+      }
     },
     onPointerOut: () => {
       setHovered(false);
       setHoveredCompartment(null);
       document.body.style.cursor = 'default';
+      // Cancel long-press if pointer leaves the compartment
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      // Re-enable camera panning
+      if (isMobile) {
+        setBlockCameraPan(false);
+      }
     },
   };
 
@@ -170,12 +309,12 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
   return (
     <group position={position}>
       <group ref={groupRef}>
-        <mesh position={[0, 0, 0.02]} {...frontMeshEvents}>
+        <mesh position={[0, 0, 0.02]} {...frontMeshEvents} userData={{ isCompartment: true }}>
           <boxGeometry args={[dimensions.width, dimensions.height, 0.04]} />
           <meshStandardMaterial color={drawerFaceColor} />
         </mesh>
 
-        <mesh position={[0, 0, 0.06]} {...frontMeshEvents}>
+        <mesh position={[0, 0, 0.06]} {...frontMeshEvents} userData={{ isCompartment: true }}>
           <boxGeometry args={[Math.min(0.3, dimensions.width * 0.4), 0.04, 0.03]} />
           <meshStandardMaterial color={handleColor} metalness={0.4} roughness={0.4} />
         </mesh>
@@ -274,6 +413,10 @@ function DrawerPopup({ compartmentId }: { compartmentId: string }) {
     enterEditMode();
   };
 
+  const stopPointerPropagation = (e: React.PointerEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <div
       style={{
@@ -293,6 +436,8 @@ function DrawerPopup({ compartmentId }: { compartmentId: string }) {
           pointerEvents: 'auto',
         }}
         onClick={(e) => e.stopPropagation()}
+        onPointerDown={stopPointerPropagation}
+        onPointerUp={stopPointerPropagation}
       >
         <div style={{
           fontWeight: 600,
@@ -307,6 +452,8 @@ function DrawerPopup({ compartmentId }: { compartmentId: string }) {
           </span>
           <button
             onClick={handleEditClick}
+            onPointerDown={stopPointerPropagation}
+            onPointerUp={stopPointerPropagation}
             style={{
               background: '#3b82f6',
               color: 'white',

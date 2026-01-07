@@ -12,6 +12,7 @@ import type {
 import { api } from '../api/client';
 import type { RoomWithDrawers } from '../api/client';
 import { useAuthStore } from './authStore';
+import { useOfflineStore } from './offlineStore';
 import {
   broadcastDrawerCreated,
   broadcastDrawerUpdated,
@@ -289,6 +290,16 @@ interface DrawerStore {
   hoveredCompartmentId: string | null;
   setHoveredCompartment: (compartmentId: string | null) => void;
 
+  // Touch interaction tracking (disables camera pan during long-press)
+  isPointerDownOnCompartment: boolean;
+  setPointerDownOnCompartment: (down: boolean) => void;
+
+  // Rectangle drag selection (mobile long-press + drag)
+  rectangleSelectStart: { row: number; col: number; drawerId: string } | null;
+  setRectangleSelectStart: (start: { row: number; col: number; drawerId: string } | null) => void;
+  updateRectangleSelect: (endRow: number, endCol: number) => void; // Updates selection in real-time during drag
+  completeRectangleSelect: () => void; // Finalizes selection and clears start
+
   // Edit mode actions
   setEditMode: (mode: EditMode) => void;
 
@@ -344,6 +355,8 @@ export const useDrawerStore = create<DrawerStore>()(
       searchMatchIds: new Set<string>(),
       lastSelectedPosition: null as { row: number; col: number } | null,
       hoveredCompartmentId: null as string | null,
+      isPointerDownOnCompartment: false,
+      rectangleSelectStart: null as { row: number; col: number; drawerId: string } | null,
       isPanelVisible: false,
       panelMode: 'inventory' as PanelMode,
       panelSnapPoint: 'collapsed' as PanelSnapPoint,
@@ -458,11 +471,12 @@ export const useDrawerStore = create<DrawerStore>()(
 
       renameDrawer: async (drawerId, name) => {
         const authState = useAuthStore.getState();
+        const timestamp = Date.now();
 
         // If online, update via API
         if (authState.mode === 'online' && authState.currentRoomId) {
           try {
-            await api.updateDrawer(authState.currentRoomId, drawerId, { name });
+            await api.updateDrawer(authState.currentRoomId, drawerId, { name, updatedAt: timestamp });
           } catch (error) {
             console.error('Failed to rename drawer:', error);
             return;
@@ -535,20 +549,37 @@ export const useDrawerStore = create<DrawerStore>()(
       moveDrawerInGrid: async (drawerId, gridX, gridY) => {
         const state = get();
         const authState = useAuthStore.getState();
+        const { isOnline, addPendingOperation } = useOfflineStore.getState();
         const drawer = state.drawers[drawerId];
         if (!drawer) return false;
         if (wouldOverlap(state.drawers, drawerId, gridX, gridY, drawer.cols, drawer.rows)) {
           return false;
         }
 
-        // If online, update via API
-        if (authState.mode === 'online' && authState.currentRoomId) {
+        const timestamp = Date.now();
+
+        // If online and connected, update via API
+        if (authState.mode === 'online' && authState.currentRoomId && isOnline) {
           try {
-            await api.updateDrawer(authState.currentRoomId, drawerId, { gridX, gridY });
+            await api.updateDrawer(authState.currentRoomId, drawerId, { gridX, gridY, updatedAt: timestamp });
           } catch (error) {
             console.error('Failed to move drawer:', error);
-            return false;
+            // Queue for later sync and continue with local update
+            addPendingOperation({
+              type: 'update',
+              entity: 'drawer',
+              entityId: drawerId,
+              data: { gridX, gridY, updatedAt: timestamp },
+            });
           }
+        } else if (authState.mode === 'online' && authState.currentRoomId && !isOnline) {
+          // Offline but authenticated - queue for later
+          addPendingOperation({
+            type: 'update',
+            entity: 'drawer',
+            entityId: drawerId,
+            data: { gridX, gridY, updatedAt: timestamp },
+          });
         }
 
         set((s) => ({
@@ -558,7 +589,7 @@ export const useDrawerStore = create<DrawerStore>()(
           },
         }));
 
-        // Broadcast to other connected users
+        // Broadcast to other connected users (will be no-op if offline)
         broadcastDrawerUpdated(drawerId, { gridX, gridY });
         return true;
       },
@@ -649,11 +680,12 @@ export const useDrawerStore = create<DrawerStore>()(
 
       updateCategory: async (id, name, colorOrIndex) => {
         const authState = useAuthStore.getState();
+        const timestamp = Date.now();
 
         // If online, update via API
         if (authState.mode === 'online' && authState.currentRoomId) {
           try {
-            const input: { name?: string; colorIndex?: number; color?: string } = { name };
+            const input: { name?: string; colorIndex?: number; color?: string; updatedAt: number } = { name, updatedAt: timestamp };
             if (typeof colorOrIndex === 'number') {
               input.colorIndex = colorOrIndex;
             } else {
@@ -725,14 +757,15 @@ export const useDrawerStore = create<DrawerStore>()(
       setDividerCount: async (compartmentId, count) => {
         const { activeDrawerId, drawers } = get();
         const authState = useAuthStore.getState();
+        const { isOnline } = useOfflineStore.getState();
         if (!activeDrawerId) return;
 
         const drawer = drawers[activeDrawerId];
         const compartment = drawer?.compartments[compartmentId];
         if (!compartment) return;
 
-        // If online, update via API and use server-generated subcompartment IDs
-        if (authState.mode === 'online') {
+        // If online and connected, update via API and use server-generated subcompartment IDs
+        if (authState.mode === 'online' && isOnline) {
           try {
             const apiSubCompartments = await api.setDividerCount(activeDrawerId, compartmentId, count);
             const subCompartments: SubCompartment[] = apiSubCompartments
@@ -764,38 +797,39 @@ export const useDrawerStore = create<DrawerStore>()(
 
             // Broadcast to other connected users
             broadcastDividersChanged(activeDrawerId, compartmentId, subCompartments);
+            return;
           } catch (error) {
             console.error('Failed to set divider count:', error);
+            // Fall through to local mode
           }
-        } else {
-          // Local mode
-          const subCompartmentCount = count + 1;
-          const existingItems = compartment.subCompartments
-            .map((sc) => sc.item)
-            .filter(Boolean);
+        }
+        // Local mode (or offline fallback)
+        const subCompartmentCount = count + 1;
+        const existingItems = compartment.subCompartments
+          .map((sc) => sc.item)
+          .filter(Boolean);
 
-          const subCompartments: SubCompartment[] = Array.from(
-            { length: subCompartmentCount },
-            (_, i) => ({
-              id: generateId(),
-              relativeSize: 1 / subCompartmentCount,
-              item: existingItems[i] || null,
-            })
-          );
+        const subCompartments: SubCompartment[] = Array.from(
+          { length: subCompartmentCount },
+          (_, i) => ({
+            id: generateId(),
+            relativeSize: 1 / subCompartmentCount,
+            item: existingItems[i] || null,
+          })
+        );
 
-          set((state) => ({
-            drawers: {
-              ...state.drawers,
-              [activeDrawerId]: {
-                ...drawer,
-                compartments: {
-                  ...drawer.compartments,
-                  [compartmentId]: { ...compartment, subCompartments },
-                },
+        set((state) => ({
+          drawers: {
+            ...state.drawers,
+            [activeDrawerId]: {
+              ...drawer,
+              compartments: {
+                ...drawer.compartments,
+                [compartmentId]: { ...compartment, subCompartments },
               },
             },
-          }));
-        }
+          },
+        }));
       },
 
       setDividerOrientation: async (compartmentId, orientation) => {
@@ -807,10 +841,12 @@ export const useDrawerStore = create<DrawerStore>()(
         const compartment = drawer?.compartments[compartmentId];
         if (!compartment) return;
 
+        const timestamp = Date.now();
+
         // If online, update via API
         if (authState.mode === 'online') {
           try {
-            await api.updateCompartment(activeDrawerId, compartmentId, { dividerOrientation: orientation });
+            await api.updateCompartment(activeDrawerId, compartmentId, { dividerOrientation: orientation, updatedAt: timestamp });
           } catch (error) {
             console.error('Failed to update compartment orientation:', error);
             return;
@@ -837,6 +873,7 @@ export const useDrawerStore = create<DrawerStore>()(
       mergeSelectedCompartments: async () => {
         const { activeDrawerId, drawers, selectedCompartmentIds } = get();
         const authState = useAuthStore.getState();
+        const { isOnline } = useOfflineStore.getState();
         if (!activeDrawerId || selectedCompartmentIds.size < 2) return;
 
         const drawer = drawers[activeDrawerId];
@@ -870,7 +907,8 @@ export const useDrawerStore = create<DrawerStore>()(
           .filter(sc => sc.item)
           .map(sc => sc.item!);
 
-        if (authState.mode === 'online') {
+        // If online and connected, try API
+        if (authState.mode === 'online' && isOnline) {
           try {
             const result = await api.mergeCompartments(activeDrawerId, compartmentIds);
 
@@ -916,42 +954,44 @@ export const useDrawerStore = create<DrawerStore>()(
               result.deletedIds,
               newCompartments[result.compartment.id]
             );
+            return;
           } catch (error) {
             console.error('Failed to merge compartments:', error);
+            // Fall through to local mode
           }
-        } else {
-          // Local mode
-          const subCount = Math.max(2, allItems.length);
-          const subCompartments: SubCompartment[] = Array.from({ length: subCount }, (_, i) => ({
-            id: generateId(),
-            relativeSize: 1 / subCount,
-            item: allItems[i] ?? null,
-          }));
-
-          const newCompartments = { ...drawer.compartments };
-          for (const id of toDeleteIds) {
-            delete newCompartments[id];
-          }
-          newCompartments[anchor.id] = {
-            ...anchor,
-            rowSpan,
-            colSpan,
-            subCompartments,
-          };
-
-          set(state => ({
-            drawers: {
-              ...state.drawers,
-              [activeDrawerId]: { ...drawer, compartments: newCompartments },
-            },
-            selectedCompartmentIds: new Set([anchor.id]),
-          }));
         }
+        // Local mode (or offline fallback)
+        const subCount = Math.max(2, allItems.length);
+        const subCompartments: SubCompartment[] = Array.from({ length: subCount }, (_, i) => ({
+          id: generateId(),
+          relativeSize: 1 / subCount,
+          item: allItems[i] ?? null,
+        }));
+
+        const newCompartments = { ...drawer.compartments };
+        for (const id of toDeleteIds) {
+          delete newCompartments[id];
+        }
+        newCompartments[anchor.id] = {
+          ...anchor,
+          rowSpan,
+          colSpan,
+          subCompartments,
+        };
+
+        set(state => ({
+          drawers: {
+            ...state.drawers,
+            [activeDrawerId]: { ...drawer, compartments: newCompartments },
+          },
+          selectedCompartmentIds: new Set([anchor.id]),
+        }));
       },
 
       splitCompartment: async (compartmentId) => {
         const { activeDrawerId, drawers } = get();
         const authState = useAuthStore.getState();
+        const { isOnline } = useOfflineStore.getState();
         if (!activeDrawerId) return;
 
         const drawer = drawers[activeDrawerId];
@@ -971,7 +1011,8 @@ export const useDrawerStore = create<DrawerStore>()(
           .filter(sc => sc.item)
           .map(sc => sc.item!);
 
-        if (authState.mode === 'online') {
+        // If online and connected, try API
+        if (authState.mode === 'online' && isOnline) {
           try {
             const result = await api.splitCompartment(activeDrawerId, compartmentId);
 
@@ -1013,77 +1054,96 @@ export const useDrawerStore = create<DrawerStore>()(
             // Broadcast split to other users
             const newCompartmentsList = result.compartments.map(comp => newCompartments[comp.id]);
             broadcastCompartmentSplit(activeDrawerId, compartmentId, newCompartmentsList);
+            return;
           } catch (error) {
             console.error('Failed to split compartment:', error);
+            // Fall through to local mode
           }
-        } else {
-          // Local mode
-          const newCompartments = { ...drawer.compartments };
-          let itemIndex = 0;
-
-          for (let r = 0; r < rowSpan; r++) {
-            for (let c = 0; c < colSpan; c++) {
-              const isAnchor = r === 0 && c === 0;
-              const newRow = compartment.row + r;
-              const newCol = compartment.col + c;
-              const newId = isAnchor ? compartmentId : generateId();
-
-              const subCompartments: SubCompartment[] = [
-                {
-                  id: generateId(),
-                  relativeSize: 0.5,
-                  item: isAnchor && itemIndex < existingItems.length ? existingItems[itemIndex++] : null,
-                },
-                {
-                  id: generateId(),
-                  relativeSize: 0.5,
-                  item: isAnchor && itemIndex < existingItems.length ? existingItems[itemIndex++] : null,
-                },
-              ];
-
-              newCompartments[newId] = {
-                id: newId,
-                row: newRow,
-                col: newCol,
-                rowSpan: 1,
-                colSpan: 1,
-                dividerOrientation: compartment.dividerOrientation,
-                subCompartments,
-              };
-            }
-          }
-
-          set(state => ({
-            drawers: {
-              ...state.drawers,
-              [activeDrawerId]: { ...drawer, compartments: newCompartments },
-            },
-            selectedCompartmentIds: new Set([compartmentId]),
-          }));
         }
+        // Local mode (or offline fallback)
+        const newCompartments = { ...drawer.compartments };
+        let itemIndex = 0;
+
+        for (let r = 0; r < rowSpan; r++) {
+          for (let c = 0; c < colSpan; c++) {
+            const isAnchor = r === 0 && c === 0;
+            const newRow = compartment.row + r;
+            const newCol = compartment.col + c;
+            const newId = isAnchor ? compartmentId : generateId();
+
+            const subCompartments: SubCompartment[] = [
+              {
+                id: generateId(),
+                relativeSize: 0.5,
+                item: isAnchor && itemIndex < existingItems.length ? existingItems[itemIndex++] : null,
+              },
+              {
+                id: generateId(),
+                relativeSize: 0.5,
+                item: isAnchor && itemIndex < existingItems.length ? existingItems[itemIndex++] : null,
+              },
+            ];
+
+            newCompartments[newId] = {
+              id: newId,
+              row: newRow,
+              col: newCol,
+              rowSpan: 1,
+              colSpan: 1,
+              dividerOrientation: compartment.dividerOrientation,
+              subCompartments,
+            };
+          }
+        }
+
+        set(state => ({
+          drawers: {
+            ...state.drawers,
+            [activeDrawerId]: { ...drawer, compartments: newCompartments },
+          },
+          selectedCompartmentIds: new Set([compartmentId]),
+        }));
       },
 
       updateItem: async (compartmentId, subCompartmentId, item) => {
         const { activeDrawerId, drawers } = get();
         const authState = useAuthStore.getState();
+        const { isOnline, addPendingOperation } = useOfflineStore.getState();
         if (!activeDrawerId) return;
 
         const drawer = drawers[activeDrawerId];
         const compartment = drawer?.compartments[compartmentId];
         if (!compartment) return;
 
-        // If online, update via API
-        if (authState.mode === 'online') {
+        const timestamp = Date.now();
+
+        // If online and connected, update via API
+        if (authState.mode === 'online' && isOnline) {
           try {
             await api.updateSubCompartment(activeDrawerId, subCompartmentId, {
               itemLabel: item?.label ?? null,
               itemCategoryId: item?.categoryId ?? null,
               itemQuantity: item?.quantity ?? null,
+              updatedAt: timestamp,
             });
           } catch (error) {
             console.error('Failed to update item:', error);
-            return;
+            // Queue for later sync
+            addPendingOperation({
+              type: 'update',
+              entity: 'subCompartment',
+              entityId: subCompartmentId,
+              data: { drawerId: activeDrawerId, compartmentId, item, updatedAt: timestamp },
+            });
           }
+        } else if (authState.mode === 'online' && !isOnline) {
+          // Offline but authenticated - queue for later
+          addPendingOperation({
+            type: 'update',
+            entity: 'subCompartment',
+            entityId: subCompartmentId,
+            data: { drawerId: activeDrawerId, compartmentId, item, updatedAt: timestamp },
+          });
         }
 
         const subCompartments = compartment.subCompartments.map((sc) =>
@@ -1218,6 +1278,63 @@ export const useDrawerStore = create<DrawerStore>()(
 
       setHoveredCompartment: (compartmentId) => {
         set({ hoveredCompartmentId: compartmentId });
+      },
+
+      setPointerDownOnCompartment: (down) => {
+        set({ isPointerDownOnCompartment: down });
+      },
+
+      setRectangleSelectStart: (start) => {
+        set({
+          rectangleSelectStart: start,
+          // Also set activeDrawerId so updateRectangleSelect works on first selection
+          ...(start ? { activeDrawerId: start.drawerId } : {}),
+        });
+      },
+
+      updateRectangleSelect: (endRow, endCol) => {
+        const { rectangleSelectStart, activeDrawerId, drawers } = get();
+        if (!rectangleSelectStart || rectangleSelectStart.drawerId !== activeDrawerId) {
+          return;
+        }
+
+        const drawer = drawers[activeDrawerId];
+        if (!drawer) {
+          return;
+        }
+
+        // Find all compartments within the rectangle
+        const fromRow = Math.min(rectangleSelectStart.row, endRow);
+        const toRow = Math.max(rectangleSelectStart.row, endRow);
+        const fromCol = Math.min(rectangleSelectStart.col, endCol);
+        const toCol = Math.max(rectangleSelectStart.col, endCol);
+
+        const compartmentIds = new Set<string>();
+        Object.values(drawer.compartments).forEach((comp) => {
+          const compRowSpan = comp.rowSpan ?? 1;
+          const compColSpan = comp.colSpan ?? 1;
+          const compEndRow = comp.row + compRowSpan - 1;
+          const compEndCol = comp.col + compColSpan - 1;
+
+          // Check if compartment overlaps with selection rectangle
+          if (
+            comp.row <= toRow &&
+            compEndRow >= fromRow &&
+            comp.col <= toCol &&
+            compEndCol >= fromCol
+          ) {
+            compartmentIds.add(comp.id);
+          }
+        });
+
+        set({
+          selectedCompartmentIds: compartmentIds,
+          lastSelectedPosition: { row: endRow, col: endCol },
+        });
+      },
+
+      completeRectangleSelect: () => {
+        set({ rectangleSelectStart: null });
       },
 
       setEditMode: (mode) => {
