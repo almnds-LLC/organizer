@@ -24,7 +24,7 @@
   padding: 0.625rem 0.875rem;
   border: 1px solid #d1d5db;
   border-radius: 0.5rem;
-  font-size: 0.9375rem;
+  font-size: 1rem; /* 16px minimum to prevent iOS zoom on focus */
   color: #111827;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
@@ -82,6 +82,10 @@
 
 /* Mobile styles */
 @media (max-width: 768px) {
+  .modal {
+    max-width: none; /* Full width on mobile */
+  }
+
   .form {
     flex: 1;
     display: flex;

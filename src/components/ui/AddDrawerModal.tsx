@@ -1,5 +1,6 @@
 import { useReducer, useCallback } from 'react';
 import { useDrawerStore } from '../../store/drawerStore';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 import {
   DEFAULT_DRAWER_ROWS,
   DEFAULT_DRAWER_COLS,
@@ -40,6 +41,7 @@ function formReducer(state: FormState, action: FormAction): FormState {
 export function AddDrawerModal() {
   const { isAddDrawerModalOpen, setAddDrawerModalOpen, addDrawer } = useDrawerStore();
   const [form, dispatch] = useReducer(formReducer, initialState);
+  const isMobile = useIsMobile();
 
   const setField = useCallback(<K extends keyof FormState>(field: K, value: FormState[K]) => {
     dispatch({ type: 'SET_FIELD', field, value });
@@ -75,7 +77,7 @@ export function AddDrawerModal() {
             value={form.name}
             onChange={(e) => setField('name', e.target.value)}
             placeholder="e.g., Kitchen Drawer"
-            autoFocus
+            autoFocus={!isMobile}
             required
           />
         </div>
