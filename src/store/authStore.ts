@@ -455,3 +455,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await api.updateMember(roomId, userId, input);
   },
 }));
+
+// Register auth failure handler to clear state when token refresh fails
+api.setAuthFailureHandler(() => {
+  roomWebSocket.disconnect();
+  useCursorStore.getState().clearAllCursors();
+  useDrawerStore.getState().clearRoomData();
+  localStorage.removeItem('organizer-current-room');
+
+  useAuthStore.setState({
+    user: null,
+    isAuthenticated: false,
+    mode: 'local',
+    rooms: [],
+    currentRoomId: null,
+    invitations: [],
+  });
+});

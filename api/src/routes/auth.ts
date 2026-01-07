@@ -66,7 +66,7 @@ authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
     httpOnly: true,
     secure: true,
     sameSite: 'Strict',
-    path: '/auth',
+    path: '/api/auth',
     maxAge: 365 * 24 * 60 * 60,
   });
 
@@ -107,7 +107,7 @@ authRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
     httpOnly: true,
     secure: true,
     sameSite: 'Strict',
-    path: '/auth',
+    path: '/api/auth',
     maxAge: 365 * 24 * 60 * 60,
   });
 
@@ -128,7 +128,7 @@ authRoutes.post('/refresh', async (c) => {
   const tokenRecord = await storage.refreshTokens.findByToken(refreshToken);
 
   if (!tokenRecord) {
-    deleteCookie(c, 'refresh_token', { path: '/auth' });
+    deleteCookie(c, 'refresh_token', { path: '/api/auth' });
     return c.json({ error: 'Invalid or expired refresh token' }, 401);
   }
 
@@ -152,7 +152,7 @@ authRoutes.post('/logout', async (c) => {
     }
   }
 
-  deleteCookie(c, 'refresh_token', { path: '/auth' });
+  deleteCookie(c, 'refresh_token', { path: '/api/auth' });
   return c.json({ success: true });
 });
 
@@ -171,7 +171,7 @@ authRoutes.post('/logout-all', async (c) => {
 
   const storage = createStorageProvider(c.env);
   await storage.refreshTokens.revokeAllForUser(payload.sub);
-  deleteCookie(c, 'refresh_token', { path: '/auth' });
+  deleteCookie(c, 'refresh_token', { path: '/api/auth' });
 
   return c.json({ success: true });
 });
@@ -229,7 +229,7 @@ authRoutes.patch('/password', zValidator('json', passwordSchema), async (c) => {
 
   await storage.users.updatePassword(user.id, newPassword);
   await storage.refreshTokens.revokeAllForUser(user.id);
-  deleteCookie(c, 'refresh_token', { path: '/auth' });
+  deleteCookie(c, 'refresh_token', { path: '/api/auth' });
 
   const { token: refreshToken } = await storage.refreshTokens.create(user.id);
   const accessToken = await createAccessToken(user.id, user.username, c.env.JWT_SECRET);
@@ -238,7 +238,7 @@ authRoutes.patch('/password', zValidator('json', passwordSchema), async (c) => {
     httpOnly: true,
     secure: true,
     sameSite: 'Strict',
-    path: '/auth',
+    path: '/api/auth',
     maxAge: 365 * 24 * 60 * 60,
   });
 

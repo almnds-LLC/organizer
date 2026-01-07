@@ -103,6 +103,7 @@ export type RoomRole = 'owner' | 'editor' | 'viewer';
 class ApiClient {
   private accessToken: string | null = null;
   private refreshPromise: Promise<string | null> | null = null;
+  private onAuthFailure: (() => void) | null = null;
 
   setToken(token: string | null) {
     this.accessToken = token;
@@ -110,6 +111,10 @@ class ApiClient {
 
   getToken(): string | null {
     return this.accessToken;
+  }
+
+  setAuthFailureHandler(handler: () => void) {
+    this.onAuthFailure = handler;
   }
 
   private async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -144,6 +149,7 @@ class ApiClient {
         }
         return retryResponse.json();
       }
+      this.onAuthFailure?.();
       throw new Error('Session expired');
     }
 
