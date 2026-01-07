@@ -38,9 +38,16 @@ export function createRealtimeProvider(env: { ROOM_SYNC: DurableObjectNamespace 
           return data.users;
         },
 
-        broadcast(_message, _excludeUserId) {
-          // Broadcast happens through WebSocket connections managed by the Durable Object.
-          // Server-initiated broadcasts would require an HTTP endpoint on the DO.
+        async broadcast(message: Record<string, unknown>) {
+          try {
+            await stub.fetch('http://internal/broadcast', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(message),
+            });
+          } catch (error) {
+            console.error('Failed to broadcast message:', error);
+          }
         },
       };
     },

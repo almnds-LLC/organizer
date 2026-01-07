@@ -81,6 +81,22 @@ export class RoomSync implements DurableObject {
       });
     }
 
+    // Broadcast a message to all connected clients (called by API routes after updates)
+    if (url.pathname === '/broadcast' && request.method === 'POST') {
+      try {
+        const message = await request.json() as SyncMessage;
+        this.broadcast(message);
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ error: 'Invalid message' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     return new Response('Not found', { status: 404 });
   }
 

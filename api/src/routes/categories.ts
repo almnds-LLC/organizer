@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { createStorageProvider, type CloudflareBindings } from '../providers/cloudflare';
+import { createStorageProvider, createRealtimeProvider, type CloudflareBindings } from '../providers/cloudflare';
 import type { IStorageProvider } from '../providers/storage';
 import { authMiddleware, type AuthContext } from '../auth/middleware';
 import { hasPermission } from '../auth/permissions';
 import { NotFoundError, ForbiddenError } from '../lib/errors';
+import type { SyncMessage } from '../durable-objects/types';
 
 const createCategorySchema = z.object({
   name: z.string().min(1).max(50),
@@ -17,6 +18,7 @@ const updateCategorySchema = z.object({
   name: z.string().min(1).max(50).optional(),
   colorIndex: z.number().int().min(0).max(9).nullable().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  updatedAt: z.number().optional(), // Client timestamp for conflict resolution
 });
 
 type Variables = { auth: AuthContext };
@@ -67,6 +69,19 @@ categoryRoutes.post(
     await checkRoomAccess(storage, roomId, auth.userId, 'category:create');
 
     const category = await storage.categories.create(roomId, input);
+
+    // Broadcast creation to connected clients
+    const realtime = createRealtimeProvider(c.env);
+    await realtime.getRoom(roomId).broadcast({
+      type: 'category_created',
+      category: {
+        id: category.id,
+        name: category.name,
+        colorIndex: category.colorIndex ?? undefined,
+        color: category.color ?? undefined,
+      },
+    } as SyncMessage);
+
     return c.json({ category }, 201);
   }
 );
@@ -88,6 +103,24 @@ categoryRoutes.patch(
     }
 
     const category = await storage.categories.update(categoryId, input);
+
+    // If null, update was skipped due to older timestamp
+    if (!category) {
+      return c.json({ category: existing, skipped: true });
+    }
+
+    // Broadcast update to connected clients - use actual saved values
+    const realtime = createRealtimeProvider(c.env);
+    await realtime.getRoom(roomId).broadcast({
+      type: 'category_updated',
+      categoryId,
+      changes: {
+        name: category.name,
+        colorIndex: category.colorIndex ?? undefined,
+        color: category.color ?? undefined,
+      },
+    } as SyncMessage);
+
     return c.json({ category });
   }
 );
@@ -105,5 +138,13 @@ categoryRoutes.delete('/rooms/:roomId/categories/:categoryId', async (c) => {
   }
 
   await storage.categories.delete(categoryId);
+
+  // Broadcast deletion to connected clients
+  const realtime = createRealtimeProvider(c.env);
+  await realtime.getRoom(roomId).broadcast({
+    type: 'category_deleted',
+    categoryId,
+  } as SyncMessage);
+
   return c.json({ success: true });
 });

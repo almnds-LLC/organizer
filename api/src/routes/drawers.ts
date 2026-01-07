@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { createStorageProvider, type CloudflareBindings } from '../providers/cloudflare';
+import { createStorageProvider, createRealtimeProvider, type CloudflareBindings } from '../providers/cloudflare';
 import type { IStorageProvider } from '../providers/storage';
 import { authMiddleware, type AuthContext } from '../auth/middleware';
 import { hasPermission } from '../auth/permissions';
 import { NotFoundError, ForbiddenError } from '../lib/errors';
+import type { SyncMessage } from '../durable-objects/types';
 
 const createDrawerSchema = z.object({
   name: z.string().min(1).max(100),
@@ -15,7 +16,9 @@ const createDrawerSchema = z.object({
   gridY: z.number().int().optional(),
 });
 
-const updateDrawerSchema = createDrawerSchema.partial();
+const updateDrawerSchema = createDrawerSchema.partial().extend({
+  updatedAt: z.number().optional(), // Client timestamp for conflict resolution
+});
 
 const reorderSchema = z.object({
   drawerIds: z.array(z.string()),
@@ -23,6 +26,7 @@ const reorderSchema = z.object({
 
 const updateCompartmentSchema = z.object({
   dividerOrientation: z.enum(['horizontal', 'vertical']).optional(),
+  updatedAt: z.number().optional(), // Client timestamp for conflict resolution
 });
 
 const setDividersSchema = z.object({
@@ -34,6 +38,7 @@ const updateSubCompartmentSchema = z.object({
   itemLabel: z.string().max(200).nullable().optional(),
   itemCategoryId: z.string().nullable().optional(),
   itemQuantity: z.number().int().min(0).nullable().optional(),
+  updatedAt: z.number().optional(), // Client timestamp for conflict resolution
 });
 
 const batchUpdateSchema = z.object({
@@ -111,6 +116,39 @@ drawerRoutes.post('/rooms/:roomId/drawers', zValidator('json', createDrawerSchem
     })),
   }));
 
+  // Broadcast creation to connected clients
+  const realtime = createRealtimeProvider(c.env);
+  await realtime.getRoom(roomId).broadcast({
+    type: 'drawer_created',
+    drawer: {
+      id: drawerWithComps.id,
+      name: drawerWithComps.name,
+      rows: drawerWithComps.rows,
+      cols: drawerWithComps.cols,
+      gridX: drawerWithComps.gridX,
+      gridY: drawerWithComps.gridY,
+      sortOrder: drawerWithComps.displayOrder,
+      compartments: Object.values(drawerWithComps.compartments).map((comp) => ({
+        id: comp.id,
+        row: comp.row,
+        col: comp.col,
+        rowSpan: comp.rowSpan,
+        colSpan: comp.colSpan,
+        dividerOrientation: comp.dividerOrientation,
+        subCompartments: comp.subCompartments.map((sub, index) => ({
+          id: sub.id,
+          relativeSize: sub.relativeSize,
+          sortOrder: index,
+          item: sub.itemLabel ? {
+            label: sub.itemLabel,
+            categoryId: sub.itemCategoryId ?? undefined,
+            quantity: sub.itemQuantity ?? undefined,
+          } : null,
+        })),
+      })),
+    },
+  } as SyncMessage);
+
   return c.json({
     drawer: {
       id: drawerWithComps.id,
@@ -186,6 +224,20 @@ drawerRoutes.patch('/rooms/:roomId/drawers/:drawerId', zValidator('json', update
   }
 
   const drawer = await storage.drawers.update(drawerId, input);
+
+  // If null, update was skipped due to older timestamp - return current state without broadcasting
+  if (!drawer) {
+    return c.json({ drawer: existing, skipped: true });
+  }
+
+  // Broadcast update to connected clients
+  const realtime = createRealtimeProvider(c.env);
+  await realtime.getRoom(roomId).broadcast({
+    type: 'drawer_updated',
+    drawerId,
+    changes: input,
+  } as SyncMessage);
+
   return c.json({ drawer });
 });
 
@@ -202,6 +254,14 @@ drawerRoutes.delete('/rooms/:roomId/drawers/:drawerId', async (c) => {
   }
 
   await storage.drawers.delete(drawerId);
+
+  // Broadcast deletion to connected clients
+  const realtime = createRealtimeProvider(c.env);
+  await realtime.getRoom(roomId).broadcast({
+    type: 'drawer_deleted',
+    drawerId,
+  } as SyncMessage);
+
   return c.json({ success: true });
 });
 
@@ -233,7 +293,23 @@ drawerRoutes.patch(
 
     await checkRoomAccess(storage, drawer.roomId, auth.userId, 'drawer:update');
 
+    const existing = await storage.compartments.findById(compartmentId);
     const compartment = await storage.compartments.update(compartmentId, input);
+
+    // If null, update was skipped due to older timestamp
+    if (!compartment) {
+      return c.json({ compartment: existing, skipped: true });
+    }
+
+    // Broadcast update to connected clients
+    const realtime = createRealtimeProvider(c.env);
+    await realtime.getRoom(drawer.roomId).broadcast({
+      type: 'compartment_updated',
+      drawerId,
+      compartmentId,
+      changes: input,
+    } as SyncMessage);
+
     return c.json({ compartment });
   }
 );
@@ -264,6 +340,24 @@ drawerRoutes.put(
       itemCategoryId: sub.itemCategoryId,
       itemQuantity: sub.itemQuantity,
     }));
+
+    // Broadcast update to connected clients
+    const realtime = createRealtimeProvider(c.env);
+    await realtime.getRoom(drawer.roomId).broadcast({
+      type: 'dividers_changed',
+      drawerId,
+      compartmentId,
+      subCompartments: subs.map((sub) => ({
+        id: sub.id,
+        relativeSize: sub.relativeSize,
+        sortOrder: sub.displayOrder,
+        item: sub.itemLabel ? {
+          label: sub.itemLabel,
+          categoryId: sub.itemCategoryId ?? undefined,
+          quantity: sub.itemQuantity ?? undefined,
+        } : null,
+      })),
+    } as SyncMessage);
 
     return c.json({ subCompartments });
   }
@@ -315,7 +409,39 @@ drawerRoutes.patch(
 
     await checkRoomAccess(storage, drawer.roomId, auth.userId, 'drawer:update');
 
+    const existing = await storage.subCompartments.findById(subId);
     const sub = await storage.subCompartments.update(subId, input);
+
+    // If null, update was skipped due to older timestamp
+    if (!sub) {
+      return c.json({
+        subCompartment: existing ? {
+          id: existing.id,
+          compartmentId: existing.compartmentId,
+          relativeSize: existing.relativeSize,
+          sortOrder: existing.displayOrder,
+          itemLabel: existing.itemLabel,
+          itemCategoryId: existing.itemCategoryId,
+          itemQuantity: existing.itemQuantity,
+        } : null,
+        skipped: true,
+      });
+    }
+
+    // Broadcast update to connected clients
+    const realtime = createRealtimeProvider(c.env);
+    await realtime.getRoom(drawer.roomId).broadcast({
+      type: 'item_updated',
+      drawerId,
+      compartmentId: sub.compartmentId,
+      subCompartmentId: subId,
+      item: sub.itemLabel ? {
+        label: sub.itemLabel,
+        categoryId: sub.itemCategoryId ?? undefined,
+        quantity: sub.itemQuantity ?? undefined,
+      } : null,
+    } as SyncMessage);
+
     return c.json({
       subCompartment: {
         id: sub.id,
@@ -352,26 +478,55 @@ drawerRoutes.post(
 
     const result = await storage.compartments.merge(drawerId, compartmentIds);
 
-    return c.json({
-      compartment: {
+    const deletedIds = compartmentIds.filter((id) => id !== result.compartment.id);
+    const compartmentResponse = {
+      id: result.compartment.id,
+      drawerId: result.compartment.drawerId,
+      row: result.compartment.row,
+      col: result.compartment.col,
+      rowSpan: result.compartment.rowSpan,
+      colSpan: result.compartment.colSpan,
+      dividerOrientation: result.compartment.dividerOrientation,
+      subCompartments: result.subCompartments.map((sub) => ({
+        id: sub.id,
+        compartmentId: sub.compartmentId,
+        relativeSize: sub.relativeSize,
+        sortOrder: sub.displayOrder,
+        itemLabel: sub.itemLabel,
+        itemCategoryId: sub.itemCategoryId,
+        itemQuantity: sub.itemQuantity,
+      })),
+    };
+
+    // Broadcast merge to connected clients
+    const realtime = createRealtimeProvider(c.env);
+    await realtime.getRoom(drawer.roomId).broadcast({
+      type: 'compartments_merged',
+      drawerId,
+      deletedIds,
+      newCompartment: {
         id: result.compartment.id,
-        drawerId: result.compartment.drawerId,
         row: result.compartment.row,
         col: result.compartment.col,
         rowSpan: result.compartment.rowSpan,
         colSpan: result.compartment.colSpan,
         dividerOrientation: result.compartment.dividerOrientation,
-        subCompartments: result.subCompartments.map((sub) => ({
+        subCompartments: result.subCompartments.map((sub, index) => ({
           id: sub.id,
-          compartmentId: sub.compartmentId,
           relativeSize: sub.relativeSize,
-          sortOrder: sub.displayOrder,
-          itemLabel: sub.itemLabel,
-          itemCategoryId: sub.itemCategoryId,
-          itemQuantity: sub.itemQuantity,
+          sortOrder: index,
+          item: sub.itemLabel ? {
+            label: sub.itemLabel,
+            categoryId: sub.itemCategoryId ?? undefined,
+            quantity: sub.itemQuantity ?? undefined,
+          } : null,
         })),
       },
-      deletedIds: compartmentIds.filter((id) => id !== result.compartment.id),
+    } as SyncMessage);
+
+    return c.json({
+      compartment: compartmentResponse,
+      deletedIds,
     });
   }
 );
@@ -392,25 +547,53 @@ drawerRoutes.post(
 
     const results = await storage.compartments.split(compartmentId);
 
-    return c.json({
-      compartments: results.map((r) => ({
+    const compartmentsResponse = results.map((r) => ({
+      id: r.compartment.id,
+      drawerId: r.compartment.drawerId,
+      row: r.compartment.row,
+      col: r.compartment.col,
+      rowSpan: r.compartment.rowSpan,
+      colSpan: r.compartment.colSpan,
+      dividerOrientation: r.compartment.dividerOrientation,
+      subCompartments: r.subCompartments.map((sub) => ({
+        id: sub.id,
+        compartmentId: sub.compartmentId,
+        relativeSize: sub.relativeSize,
+        sortOrder: sub.displayOrder,
+        itemLabel: sub.itemLabel,
+        itemCategoryId: sub.itemCategoryId,
+        itemQuantity: sub.itemQuantity,
+      })),
+    }));
+
+    // Broadcast split to connected clients
+    const realtime = createRealtimeProvider(c.env);
+    await realtime.getRoom(drawer.roomId).broadcast({
+      type: 'compartment_split',
+      drawerId,
+      deletedId: compartmentId,
+      newCompartments: results.map((r) => ({
         id: r.compartment.id,
-        drawerId: r.compartment.drawerId,
         row: r.compartment.row,
         col: r.compartment.col,
         rowSpan: r.compartment.rowSpan,
         colSpan: r.compartment.colSpan,
         dividerOrientation: r.compartment.dividerOrientation,
-        subCompartments: r.subCompartments.map((sub) => ({
+        subCompartments: r.subCompartments.map((sub, index) => ({
           id: sub.id,
-          compartmentId: sub.compartmentId,
           relativeSize: sub.relativeSize,
-          sortOrder: sub.displayOrder,
-          itemLabel: sub.itemLabel,
-          itemCategoryId: sub.itemCategoryId,
-          itemQuantity: sub.itemQuantity,
+          sortOrder: index,
+          item: sub.itemLabel ? {
+            label: sub.itemLabel,
+            categoryId: sub.itemCategoryId ?? undefined,
+            quantity: sub.itemQuantity ?? undefined,
+          } : null,
         })),
       })),
+    } as SyncMessage);
+
+    return c.json({
+      compartments: compartmentsResponse,
     });
   }
 );

@@ -4,7 +4,7 @@ export type { SyncMessage, ConnectionInfo };
 
 export interface IRealtimeRoom {
   getConnectedUsers(): Promise<ConnectionInfo[]>;
-  broadcast(message: SyncMessage, excludeUserId?: string): void;
+  broadcast(message: SyncMessage, excludeUserId?: string): Promise<void>;
 }
 
 export interface IRealtimeProvider {
