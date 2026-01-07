@@ -257,8 +257,7 @@ export function CompartmentMesh({ compartment, drawerId, totalRows }: Compartmen
 
 function DrawerPopup({ compartmentId }: { compartmentId: string }) {
   const categories = useDrawerStore((s) => s.categories);
-  const setPanelMode = useDrawerStore((s) => s.setPanelMode);
-  const setPanelVisible = useDrawerStore((s) => s.setPanelVisible);
+  const enterEditMode = useDrawerStore((s) => s.enterEditMode);
 
   const compartment = useDrawerStore((s) => {
     const drawer = s.activeDrawerId ? s.drawers[s.activeDrawerId] : null;
@@ -269,9 +268,10 @@ function DrawerPopup({ compartmentId }: { compartmentId: string }) {
 
   const isHorizontal = compartment.dividerOrientation === 'horizontal';
 
-  const handleEditClick = () => {
-    setPanelMode('edit');
-    setPanelVisible(true);
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    enterEditMode();
   };
 
   return (

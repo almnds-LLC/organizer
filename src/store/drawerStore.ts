@@ -308,6 +308,7 @@ interface DrawerStore {
   setInventoryGrouping: (grouping: InventoryGrouping) => void;
   navigateToItem: (drawerId: string, compartmentId: string) => void;
   navigateToDrawer: (drawerId: string) => void;
+  enterEditMode: () => void; // Enter edit mode, save panel state
   exitEditMode: () => void; // Go back from edit, restore panel visibility
 
   // Helpers
@@ -1178,11 +1179,16 @@ export const useDrawerStore = create<DrawerStore>()(
           } else {
             newSelection.add(compartmentId);
           }
+
+          // Auto-open edit pane when multi-selecting
+          const openEditPane = newSelection.size > 1;
+
           return {
             selectedCompartmentIds: newSelection,
             lastSelectedPosition: compartment
               ? { row: compartment.row, col: compartment.col }
               : state.lastSelectedPosition,
+            ...(openEditPane && { panelMode: 'edit' as PanelMode, isPanelVisible: true }),
           };
         });
       },
@@ -1208,9 +1214,13 @@ export const useDrawerStore = create<DrawerStore>()(
           }
         });
 
+        // Auto-open edit pane when multi-selecting
+        const openEditPane = newSelection.size > 1;
+
         set({
           selectedCompartmentIds: newSelection,
           lastSelectedPosition: { row: toRow, col: toCol },
+          ...(openEditPane && { panelMode: 'edit' as PanelMode, isPanelVisible: true }),
         });
       },
 
@@ -1400,6 +1410,19 @@ export const useDrawerStore = create<DrawerStore>()(
           selectedCompartmentIds: new Set<string>(),
           selectedSubCompartmentId: null,
           selectedDrawerIds: new Set([drawerId]),
+          panelMode: 'edit' as PanelMode,
+          panelWasVisibleBeforeEdit: wasVisibleBefore,
+          isPanelVisible: true,
+          panelSnapPoint: 'half' as PanelSnapPoint,
+        });
+      },
+      enterEditMode: () => {
+        const { isPanelVisible, panelSnapPoint, panelMode } = get();
+        // Don't save state if already in edit mode
+        if (panelMode === 'edit') return;
+        const wasSheetOpen = panelSnapPoint !== 'collapsed';
+        const wasVisibleBefore = isPanelVisible || wasSheetOpen;
+        set({
           panelMode: 'edit' as PanelMode,
           panelWasVisibleBeforeEdit: wasVisibleBefore,
           isPanelVisible: true,

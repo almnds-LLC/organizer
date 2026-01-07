@@ -125,16 +125,18 @@ export function AuthDropdown() {
           )}
         </div>
 
-        <div className={styles.turnstileContainer}>
+
           <Turnstile
             key={turnstileKey}
             sitekey={siteKey}
             onVerify={(token: string) => setTurnstileToken(token)}
             onExpire={() => setTurnstileToken(null)}
             onError={() => setTurnstileToken(null)}
+            className={styles.turnstileContainer}
+            appearance="interaction-only"
+            size="flexible"
             theme="light"
           />
-        </div>
 
         {error && <p className={styles.authError}>{error}</p>}
 

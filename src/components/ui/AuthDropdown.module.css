@@ -123,18 +123,13 @@
   margin-top: 0.25rem;
 }
 
-/* Turnstile */
+/* Turnstile - only takes up space when widget is visible (interaction-only mode) */
 .turnstileContainer {
-  margin: 1rem 0;
-  display: flex;
-  justify-content: center;
-  overflow: hidden;
+  /* No fixed height - let it collapse when empty */
 }
 
-/* Scale down the turnstile widget to fit better */
-.turnstileContainer > div {
-  transform: scale(0.98);
-  transform-origin: center;
+.turnstileContainer:not(:empty) {
+  margin-bottom: 1rem;
 }
 
 /* Error message */
@@ -273,10 +268,13 @@
 }
 
 .authModal .turnstileContainer {
-  margin: 1rem 0;
   display: flex;
   justify-content: center;
   overflow: visible;
+}
+
+.authModal .turnstileContainer:not(:empty) {
+  margin: 1rem 0;
 }
 
 .authModal .turnstileContainer > div {

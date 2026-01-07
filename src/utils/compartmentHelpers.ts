@@ -93,7 +93,7 @@ export function getBoundingBox(cells: GridCell[]): BoundingBox {
 
 /**
  * Check if selected compartments can be merged.
- * They must form a valid rectangle and all be 1x1 cells.
+ * All occupied cells must form a valid rectangle with no gaps.
  */
 export function canMergeCompartments(
   compartments: Record<string, Compartment>,
@@ -111,17 +111,14 @@ export function canMergeCompartments(
     return { valid: false, error: 'Some selected compartments not found' };
   }
 
-  // Check all selected compartments are 1x1 (can only merge single cells)
-  const nonSingleCells = selected.filter(c => (c.rowSpan ?? 1) !== 1 || (c.colSpan ?? 1) !== 1);
-  if (nonSingleCells.length > 0) {
-    return { valid: false, error: 'Can only merge single-cell compartments' };
+  // Get all cells occupied by all selected compartments
+  const allCells: GridCell[] = [];
+  for (const comp of selected) {
+    allCells.push(...getOccupiedCells(comp));
   }
 
-  // Get all cells
-  const cells: GridCell[] = selected.map(c => ({ row: c.row, col: c.col }));
-
   // Check they form a rectangle
-  if (!isValidRectangle(cells)) {
+  if (!isValidRectangle(allCells)) {
     return { valid: false, error: 'Selection must form a rectangle' };
   }
 
@@ -149,10 +146,15 @@ export function getMergeResult(
 
   if (selected.length < 2) return null;
 
-  const cells = selected.map(c => ({ row: c.row, col: c.col }));
-  if (!isValidRectangle(cells)) return null;
+  // Get all cells occupied by all selected compartments
+  const allCells: GridCell[] = [];
+  for (const comp of selected) {
+    allCells.push(...getOccupiedCells(comp));
+  }
 
-  const bbox = getBoundingBox(cells);
+  if (!isValidRectangle(allCells)) return null;
+
+  const bbox = getBoundingBox(allCells);
 
   // Find the anchor (top-left) compartment
   const anchor = selected.find(c => c.row === bbox.minRow && c.col === bbox.minCol);
