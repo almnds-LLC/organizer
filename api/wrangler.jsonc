@@ -19,7 +19,7 @@
 		{
 			"binding": "DB",
 			"database_name": "drawer-organizer",
-			"database_id": "local"
+			"database_id": "6d606646-fe50-463f-a155-2861870d082a"
 		}
 	],
 	"durable_objects": {
@@ -33,7 +33,7 @@
 	"migrations": [
 		{
 			"tag": "v1",
-			"new_classes": ["RoomSync"]
+			"new_sqlite_classes": ["RoomSync"]
 		}
 	]
 	/**
