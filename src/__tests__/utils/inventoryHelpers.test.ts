@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  getLocationString,
   aggregateInventory,
   groupByCategory,
   groupByDrawer,
-  getTotalItemCount,
 } from '../../utils/inventoryHelpers';
 import type { Drawer, Category } from '../../types/drawer';
 
@@ -46,19 +44,6 @@ function createTestDrawer(id: string, name: string, items: Array<{ row: number; 
 }
 
 describe('inventoryHelpers', () => {
-  describe('getLocationString', () => {
-    it('should convert row/col to location string', () => {
-      expect(getLocationString(0, 0)).toBe('A1');
-      expect(getLocationString(0, 1)).toBe('B1');
-      expect(getLocationString(1, 0)).toBe('A2');
-      expect(getLocationString(2, 2)).toBe('C3');
-    });
-
-    it('should handle larger columns', () => {
-      expect(getLocationString(0, 25)).toBe('Z1');
-    });
-  });
-
   describe('aggregateInventory', () => {
     it('should return empty array for no drawers', () => {
       expect(aggregateInventory({}, [])).toEqual([]);
@@ -218,58 +203,4 @@ describe('inventoryHelpers', () => {
     });
   });
 
-  describe('getTotalItemCount', () => {
-    it('should return 0 for empty drawers', () => {
-      expect(getTotalItemCount({})).toBe(0);
-    });
-
-    it('should count all items across drawers', () => {
-      const drawer1 = createTestDrawer('d1', 'First', [
-        { row: 0, col: 0, label: 'A' },
-        { row: 0, col: 1, label: 'B' },
-      ]);
-      const drawer2 = createTestDrawer('d2', 'Second', [
-        { row: 0, col: 0, label: 'C' },
-      ]);
-
-      expect(getTotalItemCount({ d1: drawer1, d2: drawer2 })).toBe(3);
-    });
-
-    it('should not count empty compartments', () => {
-      const drawer: Drawer = {
-        id: 'd1',
-        name: 'Test',
-        rows: 1,
-        cols: 2,
-        compartments: {
-          c1: {
-            id: 'c1',
-            row: 0,
-            col: 0,
-            rowSpan: 1,
-            colSpan: 1,
-            dividerOrientation: 'horizontal',
-            subCompartments: [
-              { id: 's1', relativeSize: 1, item: { label: 'Item' } },
-            ],
-          },
-          c2: {
-            id: 'c2',
-            row: 0,
-            col: 1,
-            rowSpan: 1,
-            colSpan: 1,
-            dividerOrientation: 'horizontal',
-            subCompartments: [
-              { id: 's2', relativeSize: 1, item: null },
-            ],
-          },
-        },
-        gridX: 0,
-        gridY: 0,
-      };
-
-      expect(getTotalItemCount({ d1: drawer })).toBe(1);
-    });
-  });
 });

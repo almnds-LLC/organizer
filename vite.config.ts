@@ -69,6 +69,6 @@ export default defineConfig({
     }),
   ].filter(Boolean),
   server: {
-    allowedHosts: ['organize.almnds.com']
+    allowedHosts: ['organize-staging.almnds.com']
   }
 })

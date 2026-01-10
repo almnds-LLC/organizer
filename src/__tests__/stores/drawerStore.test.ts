@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDrawerStore, getCategoryColor } from '../../store/drawerStore';
 import type { Category, Drawer, Compartment, SubCompartment } from '../../types/drawer';
 import type { RoomWithDrawers } from '../../api/client';
+import { api } from '../../api/client';
+import { useAuthStore } from '../../store/authStore';
 
 // Mock the api client
 vi.mock('../../api/client', () => ({
@@ -29,19 +31,32 @@ vi.mock('../../store/authStore', () => ({
   },
 }));
 
-// Mock syncService
-vi.mock('../../api/syncService', () => ({
-  broadcastDrawerCreated: vi.fn(),
-  broadcastDrawerUpdated: vi.fn(),
-  broadcastDrawerDeleted: vi.fn(),
-  broadcastCompartmentUpdated: vi.fn(),
-  broadcastDividersChanged: vi.fn(),
-  broadcastItemUpdated: vi.fn(),
-  broadcastItemsBatchUpdated: vi.fn(),
-  broadcastCategoryCreated: vi.fn(),
-  broadcastCategoryUpdated: vi.fn(),
-  broadcastCategoryDeleted: vi.fn(),
+// Mock offlineStore
+vi.mock('../../store/offlineStore', () => ({
+  useOfflineStore: {
+    getState: vi.fn(() => ({
+      isOnline: true,
+      addPendingOperation: vi.fn(),
+    })),
+  },
 }));
+
+const mockApi = api as unknown as {
+  createDrawer: ReturnType<typeof vi.fn>;
+  updateDrawer: ReturnType<typeof vi.fn>;
+  deleteDrawer: ReturnType<typeof vi.fn>;
+  updateCompartment: ReturnType<typeof vi.fn>;
+  updateSubCompartment: ReturnType<typeof vi.fn>;
+  setDividerCount: ReturnType<typeof vi.fn>;
+  batchUpdateSubCompartments: ReturnType<typeof vi.fn>;
+  createCategory: ReturnType<typeof vi.fn>;
+  updateCategory: ReturnType<typeof vi.fn>;
+  deleteCategory: ReturnType<typeof vi.fn>;
+};
+
+const mockAuthStore = useAuthStore as unknown as {
+  getState: ReturnType<typeof vi.fn>;
+};
 
 function createTestDrawer(overrides?: Partial<Drawer>): Drawer {
   const subCompartment: SubCompartment = {
@@ -350,7 +365,7 @@ describe('drawerStore', () => {
 
       const { searchQuery, searchMatchIds } = useDrawerStore.getState();
       expect(searchQuery).toBe('screw');
-      expect(searchMatchIds.has('comp1')).toBe(true);
+      expect(searchMatchIds.has('comp1:sub1')).toBe(true);
     });
 
     it('should clear matches on empty query', () => {
@@ -892,13 +907,6 @@ describe('drawerStore', () => {
     });
   });
 
-  describe('onSheetDragStart', () => {
-    it('should be a no-op', () => {
-      useDrawerStore.getState().onSheetDragStart();
-      // No error thrown
-    });
-  });
-
   describe('loadFromApi', () => {
     it('should load room data from API format', () => {
       const apiRoom = {
@@ -979,7 +987,7 @@ describe('drawerStore', () => {
 
       useDrawerStore.getState().setSearchQuery('electr');
 
-      expect(useDrawerStore.getState().searchMatchIds.has('comp1')).toBe(true);
+      expect(useDrawerStore.getState().searchMatchIds.has('comp1:sub1')).toBe(true);
     });
   });
 
@@ -1055,6 +1063,325 @@ describe('drawerStore', () => {
       useDrawerStore.getState().selectCompartment('comp1');
 
       expect(useDrawerStore.getState().panelMode).toBe('inventory');
+    });
+  });
+});
+
+describe('drawerStore (online mode)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthStore.getState.mockReturnValue({
+      mode: 'online',
+      currentRoomId: 'room1',
+    });
+    useDrawerStore.setState({
+      drawers: {},
+      drawerOrder: [],
+      activeDrawerId: null,
+      categories: {},
+      selectedDrawerIds: new Set(),
+      selectedCompartmentIds: new Set(),
+      selectedSubCompartmentId: null,
+      editMode: 'view',
+      isAddDrawerModalOpen: false,
+      isCategoryModalOpen: false,
+      searchQuery: '',
+      searchMatchIds: new Set(),
+      isPanelVisible: false,
+      panelMode: 'inventory',
+      panelSnapPoint: 'collapsed',
+      inventoryGrouping: 'category',
+      panelWasVisibleBeforeEdit: false,
+    });
+  });
+
+  afterEach(() => {
+    mockAuthStore.getState.mockReturnValue({
+      mode: 'local',
+      currentRoomId: null,
+    });
+  });
+
+  describe('addDrawer', () => {
+    it('should call API and add drawer from response', async () => {
+      const apiResponse = {
+        id: 'api-drawer-1',
+        name: 'API Drawer',
+        rows: 2,
+        cols: 3,
+        gridX: 0,
+        gridY: 0,
+        compartments: [
+          {
+            id: 'api-comp-1',
+            row: 0,
+            col: 0,
+            rowSpan: 1,
+            colSpan: 1,
+            dividerOrientation: 'horizontal',
+            subCompartments: [
+              { id: 'api-sub-1', relativeSize: 1, sortOrder: 0 },
+            ],
+          },
+        ],
+      };
+      mockApi.createDrawer.mockResolvedValue(apiResponse);
+
+      await useDrawerStore.getState().addDrawer({ name: 'API Drawer', rows: 2, cols: 3 });
+
+      expect(mockApi.createDrawer).toHaveBeenCalledWith('room1', {
+        name: 'API Drawer',
+        rows: 2,
+        cols: 3,
+        gridX: 0,
+        gridY: 0,
+      });
+
+      const state = useDrawerStore.getState();
+      expect(state.drawers['api-drawer-1']).toBeDefined();
+      expect(state.drawers['api-drawer-1'].name).toBe('API Drawer');
+      expect(state.activeDrawerId).toBe('api-drawer-1');
+    });
+
+    it('should handle API errors gracefully', async () => {
+      mockApi.createDrawer.mockRejectedValue(new Error('Network error'));
+
+      await useDrawerStore.getState().addDrawer({ name: 'Test' });
+
+      expect(Object.keys(useDrawerStore.getState().drawers)).toHaveLength(0);
+    });
+  });
+
+  describe('removeDrawer', () => {
+    it('should call API to delete drawer', async () => {
+      const drawer = createTestDrawer();
+      useDrawerStore.setState({
+        drawers: { drawer1: drawer },
+        drawerOrder: ['drawer1'],
+        activeDrawerId: 'drawer1',
+      });
+      mockApi.deleteDrawer.mockResolvedValue(undefined);
+
+      await useDrawerStore.getState().removeDrawer('drawer1');
+
+      expect(mockApi.deleteDrawer).toHaveBeenCalledWith('room1', 'drawer1');
+      expect(Object.keys(useDrawerStore.getState().drawers)).toHaveLength(0);
+    });
+
+    it('should handle API errors gracefully', async () => {
+      const drawer = createTestDrawer();
+      useDrawerStore.setState({
+        drawers: { drawer1: drawer },
+        drawerOrder: ['drawer1'],
+      });
+      mockApi.deleteDrawer.mockRejectedValue(new Error('Network error'));
+
+      await useDrawerStore.getState().removeDrawer('drawer1');
+
+      // Returns early on error - drawer should still exist
+      expect(Object.keys(useDrawerStore.getState().drawers)).toHaveLength(1);
+    });
+  });
+
+  describe('renameDrawer', () => {
+    it('should call API to update drawer name', async () => {
+      const drawer = createTestDrawer();
+      useDrawerStore.setState({
+        drawers: { drawer1: drawer },
+        drawerOrder: ['drawer1'],
+      });
+      mockApi.updateDrawer.mockResolvedValue({ ...drawer, name: 'New Name' });
+
+      await useDrawerStore.getState().renameDrawer('drawer1', 'New Name');
+
+      expect(mockApi.updateDrawer).toHaveBeenCalledWith('room1', 'drawer1', {
+        name: 'New Name',
+        updatedAt: expect.any(Number),
+      });
+      expect(useDrawerStore.getState().drawers.drawer1.name).toBe('New Name');
+    });
+  });
+
+  describe('setCompartmentSize', () => {
+    it('should call API to update compartment size', async () => {
+      const drawer = createTestDrawer();
+      useDrawerStore.setState({
+        drawers: { drawer1: drawer },
+      });
+      mockApi.updateDrawer.mockResolvedValue(drawer);
+
+      await useDrawerStore.getState().setCompartmentSize('drawer1', 50, 60);
+
+      expect(mockApi.updateDrawer).toHaveBeenCalledWith('room1', 'drawer1', {
+        compartmentWidth: 50,
+        compartmentHeight: 60,
+        updatedAt: expect.any(Number),
+      });
+      expect(useDrawerStore.getState().drawers.drawer1.compartmentWidth).toBe(50);
+      expect(useDrawerStore.getState().drawers.drawer1.compartmentHeight).toBe(60);
+    });
+  });
+
+  describe('updateItem', () => {
+    it('should call API to update subcompartment item', async () => {
+      const drawer = createTestDrawer();
+      useDrawerStore.setState({
+        drawers: { drawer1: drawer },
+        activeDrawerId: 'drawer1',
+      });
+      mockApi.updateSubCompartment.mockResolvedValue({});
+
+      await useDrawerStore.getState().updateItem('comp1', 'sub1', { label: 'Screws', quantity: 10 });
+
+      expect(mockApi.updateSubCompartment).toHaveBeenCalledWith('drawer1', 'sub1', {
+        itemLabel: 'Screws',
+        itemQuantity: 10,
+        itemCategoryId: null,
+        updatedAt: expect.any(Number),
+      });
+    });
+
+    it('should queue offline when API fails', async () => {
+      const drawer = createTestDrawer();
+      useDrawerStore.setState({
+        drawers: { drawer1: drawer },
+        activeDrawerId: 'drawer1',
+      });
+      mockApi.updateSubCompartment.mockRejectedValue(new Error('Network error'));
+
+      await useDrawerStore.getState().updateItem('comp1', 'sub1', { label: 'Test' });
+
+      // Item should still be updated locally
+      const sc = useDrawerStore.getState().drawers.drawer1.compartments.comp1.subCompartments[0];
+      expect(sc.item?.label).toBe('Test');
+    });
+  });
+
+  describe('setDividerCount', () => {
+    it('should call API to update divider count', async () => {
+      const drawer = createTestDrawer();
+      useDrawerStore.setState({
+        drawers: { drawer1: drawer },
+        activeDrawerId: 'drawer1',
+      });
+      mockApi.setDividerCount.mockResolvedValue([
+        { id: 'new-sub-1', relativeSize: 0.5, sortOrder: 0, itemLabel: null, itemQuantity: null, itemCategoryId: null },
+        { id: 'new-sub-2', relativeSize: 0.5, sortOrder: 1, itemLabel: null, itemQuantity: null, itemCategoryId: null },
+      ]);
+
+      await useDrawerStore.getState().setDividerCount('comp1', 1);
+
+      expect(mockApi.setDividerCount).toHaveBeenCalledWith('drawer1', 'comp1', 1);
+    });
+  });
+
+  describe('addCategory', () => {
+    it('should call API to create category', async () => {
+      mockApi.createCategory.mockResolvedValue({
+        id: 'api-cat-1',
+        name: 'New Category',
+        colorIndex: 2,
+      });
+
+      await useDrawerStore.getState().addCategory('New Category', 2);
+
+      expect(mockApi.createCategory).toHaveBeenCalledWith('room1', {
+        name: 'New Category',
+        colorIndex: 2,
+      });
+      expect(useDrawerStore.getState().categories['api-cat-1']).toBeDefined();
+    });
+
+    it('should create category with custom color', async () => {
+      mockApi.createCategory.mockResolvedValue({
+        id: 'api-cat-1',
+        name: 'Custom',
+        color: '#ff5500',
+      });
+
+      await useDrawerStore.getState().addCategory('Custom', '#ff5500');
+
+      expect(mockApi.createCategory).toHaveBeenCalledWith('room1', {
+        name: 'Custom',
+        color: '#ff5500',
+      });
+    });
+  });
+
+  describe('updateCategory', () => {
+    it('should call API to update category', async () => {
+      useDrawerStore.setState({
+        categories: { cat1: { id: 'cat1', name: 'Old', colorIndex: 0 } },
+      });
+      mockApi.updateCategory.mockResolvedValue({
+        id: 'cat1',
+        name: 'Updated',
+        colorIndex: 3,
+      });
+
+      await useDrawerStore.getState().updateCategory('cat1', 'Updated', 3);
+
+      expect(mockApi.updateCategory).toHaveBeenCalledWith('room1', 'cat1', {
+        name: 'Updated',
+        colorIndex: 3,
+        updatedAt: expect.any(Number),
+      });
+    });
+  });
+
+  describe('removeCategory', () => {
+    it('should call API to delete category', async () => {
+      useDrawerStore.setState({
+        categories: { cat1: { id: 'cat1', name: 'Test', colorIndex: 0 } },
+      });
+      mockApi.deleteCategory.mockResolvedValue(undefined);
+
+      await useDrawerStore.getState().removeCategory('cat1');
+
+      expect(mockApi.deleteCategory).toHaveBeenCalledWith('room1', 'cat1');
+      expect(useDrawerStore.getState().categories.cat1).toBeUndefined();
+    });
+  });
+
+  describe('applyToSelected', () => {
+    it('should batch update subcompartments via API', async () => {
+      const compartments: Record<string, Compartment> = {
+        comp1: {
+          id: 'comp1',
+          row: 0,
+          col: 0,
+          rowSpan: 1,
+          colSpan: 1,
+          dividerOrientation: 'horizontal',
+          subCompartments: [{ id: 'sub1', relativeSize: 1, item: { label: 'Item 1' } }],
+        },
+        comp2: {
+          id: 'comp2',
+          row: 0,
+          col: 1,
+          rowSpan: 1,
+          colSpan: 1,
+          dividerOrientation: 'horizontal',
+          subCompartments: [{ id: 'sub2', relativeSize: 1, item: { label: 'Item 2' } }],
+        },
+      };
+      const drawer = createTestDrawer({ compartments });
+      useDrawerStore.setState({
+        drawers: { drawer1: drawer },
+        activeDrawerId: 'drawer1',
+        selectedCompartmentIds: new Set(['comp1', 'comp2']),
+      });
+      mockApi.batchUpdateSubCompartments.mockResolvedValue([]);
+
+      await useDrawerStore.getState().applyToSelected({ categoryId: 'cat1' });
+
+      expect(mockApi.batchUpdateSubCompartments).toHaveBeenCalledWith(
+        'drawer1',
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'sub1', itemCategoryId: 'cat1' }),
+          expect.objectContaining({ id: 'sub2', itemCategoryId: 'cat1' }),
+        ])
+      );
     });
   });
 });

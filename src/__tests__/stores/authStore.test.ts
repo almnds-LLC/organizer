@@ -28,6 +28,7 @@ vi.mock('../../api/client', () => ({
     updateCompartment: vi.fn(),
     setDividerCount: vi.fn(),
     batchUpdateSubCompartments: vi.fn(),
+    setAuthFailureHandler: vi.fn(),
   },
 }));
 
