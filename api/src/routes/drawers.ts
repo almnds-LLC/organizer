@@ -14,10 +14,12 @@ const createDrawerSchema = z.object({
   cols: z.number().int().min(1).max(20).optional(),
   gridX: z.number().int().optional(),
   gridY: z.number().int().optional(),
+  compartmentWidth: z.number().int().min(1).max(10).optional(),
+  compartmentHeight: z.number().int().min(1).max(10).optional(),
 });
 
 const updateDrawerSchema = createDrawerSchema.partial().extend({
-  updatedAt: z.number().optional(), // Client timestamp for conflict resolution
+  updatedAt: z.number().optional(),
 });
 
 const reorderSchema = z.object({
@@ -26,7 +28,7 @@ const reorderSchema = z.object({
 
 const updateCompartmentSchema = z.object({
   dividerOrientation: z.enum(['horizontal', 'vertical']).optional(),
-  updatedAt: z.number().optional(), // Client timestamp for conflict resolution
+  updatedAt: z.number().optional(),
 });
 
 const setDividersSchema = z.object({
@@ -38,7 +40,7 @@ const updateSubCompartmentSchema = z.object({
   itemLabel: z.string().max(200).nullable().optional(),
   itemCategoryId: z.string().nullable().optional(),
   itemQuantity: z.number().int().min(0).nullable().optional(),
-  updatedAt: z.number().optional(), // Client timestamp for conflict resolution
+  updatedAt: z.number().optional(),
 });
 
 const batchUpdateSchema = z.object({
@@ -116,7 +118,6 @@ drawerRoutes.post('/rooms/:roomId/drawers', zValidator('json', createDrawerSchem
     })),
   }));
 
-  // Broadcast creation to connected clients
   const realtime = createRealtimeProvider(c.env);
   await realtime.getRoom(roomId).broadcast({
     type: 'drawer_created',
@@ -225,12 +226,10 @@ drawerRoutes.patch('/rooms/:roomId/drawers/:drawerId', zValidator('json', update
 
   const drawer = await storage.drawers.update(drawerId, input);
 
-  // If null, update was skipped due to older timestamp - return current state without broadcasting
   if (!drawer) {
     return c.json({ drawer: existing, skipped: true });
   }
 
-  // Broadcast update to connected clients
   const realtime = createRealtimeProvider(c.env);
   await realtime.getRoom(roomId).broadcast({
     type: 'drawer_updated',
@@ -255,7 +254,6 @@ drawerRoutes.delete('/rooms/:roomId/drawers/:drawerId', async (c) => {
 
   await storage.drawers.delete(drawerId);
 
-  // Broadcast deletion to connected clients
   const realtime = createRealtimeProvider(c.env);
   await realtime.getRoom(roomId).broadcast({
     type: 'drawer_deleted',
@@ -296,12 +294,10 @@ drawerRoutes.patch(
     const existing = await storage.compartments.findById(compartmentId);
     const compartment = await storage.compartments.update(compartmentId, input);
 
-    // If null, update was skipped due to older timestamp
     if (!compartment) {
       return c.json({ compartment: existing, skipped: true });
     }
 
-    // Broadcast update to connected clients
     const realtime = createRealtimeProvider(c.env);
     await realtime.getRoom(drawer.roomId).broadcast({
       type: 'compartment_updated',
@@ -341,7 +337,6 @@ drawerRoutes.put(
       itemQuantity: sub.itemQuantity,
     }));
 
-    // Broadcast update to connected clients
     const realtime = createRealtimeProvider(c.env);
     await realtime.getRoom(drawer.roomId).broadcast({
       type: 'dividers_changed',
@@ -412,7 +407,6 @@ drawerRoutes.patch(
     const existing = await storage.subCompartments.findById(subId);
     const sub = await storage.subCompartments.update(subId, input);
 
-    // If null, update was skipped due to older timestamp
     if (!sub) {
       return c.json({
         subCompartment: existing ? {
@@ -428,7 +422,6 @@ drawerRoutes.patch(
       });
     }
 
-    // Broadcast update to connected clients
     const realtime = createRealtimeProvider(c.env);
     await realtime.getRoom(drawer.roomId).broadcast({
       type: 'item_updated',
@@ -498,7 +491,6 @@ drawerRoutes.post(
       })),
     };
 
-    // Broadcast merge to connected clients
     const realtime = createRealtimeProvider(c.env);
     await realtime.getRoom(drawer.roomId).broadcast({
       type: 'compartments_merged',
@@ -566,7 +558,6 @@ drawerRoutes.post(
       })),
     }));
 
-    // Broadcast split to connected clients
     const realtime = createRealtimeProvider(c.env);
     await realtime.getRoom(drawer.roomId).broadcast({
       type: 'compartment_split',

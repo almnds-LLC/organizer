@@ -3,6 +3,7 @@ export interface Category {
   name: string;
   colorIndex?: number;
   color?: string;
+  displayOrder?: number;
 }
 
 export interface StoredItem {
@@ -32,9 +33,12 @@ export interface Drawer {
   name: string;
   rows: number;
   cols: number;
+  compartmentWidth?: number;  // Grid units (1, 2, 3, etc.) - defaults to 1
+  compartmentHeight?: number; // Grid units (1, 2, 3, etc.) - defaults to 1
   compartments: Record<string, Compartment>;
   gridX: number;
   gridY: number;
+  updatedAt?: number;
 }
 
 export type EditMode = 'view' | 'single' | 'mass';
@@ -44,4 +48,6 @@ export interface CreateDrawerOptions {
   rows?: number;
   cols?: number;
   defaultDividerCount?: number;
+  compartmentWidth?: number;
+  compartmentHeight?: number;
 }

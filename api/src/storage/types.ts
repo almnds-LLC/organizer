@@ -1,5 +1,3 @@
-// Domain types matching the database schema
-
 export interface User {
   id: string;
   username: string;
@@ -68,6 +66,8 @@ export interface Drawer {
   cols: number;
   gridX: number;
   gridY: number;
+  compartmentWidth: number;
+  compartmentHeight: number;
   displayOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -99,7 +99,6 @@ export interface SubCompartment {
   updatedAt: string;
 }
 
-// Aggregate types for API responses
 export interface CompartmentWithSubs extends Compartment {
   subCompartments: SubCompartment[];
 }
@@ -122,7 +121,6 @@ export interface RoomSummary extends Room {
   drawerCount: number;
 }
 
-// Input types
 export interface CreateUserInput {
   username: string;
   password: string;
@@ -148,7 +146,9 @@ export interface UpdateDrawerInput {
   cols?: number;
   gridX?: number;
   gridY?: number;
-  updatedAt?: number; // Client timestamp (epoch ms) for conflict resolution
+  compartmentWidth?: number;
+  compartmentHeight?: number;
+  updatedAt?: number;
 }
 
 export interface CreateCategoryInput {
@@ -161,12 +161,12 @@ export interface UpdateCategoryInput {
   name?: string;
   colorIndex?: number | null;
   color?: string | null;
-  updatedAt?: number; // Client timestamp (epoch ms) for conflict resolution
+  updatedAt?: number;
 }
 
 export interface UpdateCompartmentInput {
   dividerOrientation?: DividerOrientation;
-  updatedAt?: number; // Client timestamp (epoch ms) for conflict resolution
+  updatedAt?: number;
 }
 
 export interface UpdateSubCompartmentInput {
@@ -174,13 +174,7 @@ export interface UpdateSubCompartmentInput {
   itemLabel?: string | null;
   itemCategoryId?: string | null;
   itemQuantity?: number | null;
-  updatedAt?: number; // Client timestamp (epoch ms) for conflict resolution
-}
-
-export interface InviteToRoomInput {
-  username: string;
-  role: RoomRole;
-  canInvite?: boolean;
+  updatedAt?: number;
 }
 
 export interface UpdateMemberInput {

@@ -60,7 +60,6 @@ export class DrawerRepository implements IDrawerRepository {
       subCompartmentRows = result.results;
     }
 
-    // Group sub-compartments by compartment
     const subsByCompartment = new Map<string, SubCompartment[]>();
     for (const row of subCompartmentRows) {
       const sub = mapRowToSubCompartment(row);
@@ -69,7 +68,6 @@ export class DrawerRepository implements IDrawerRepository {
       subsByCompartment.set(sub.compartmentId, existing);
     }
 
-    // Build compartments record
     const compartments: Record<string, CompartmentWithSubs> = {};
     for (const row of compartmentRows.results) {
       const comp = mapRowToCompartment(row);
@@ -88,14 +86,12 @@ export class DrawerRepository implements IDrawerRepository {
     const rows = input.rows ?? DEFAULT_ROWS;
     const cols = input.cols ?? DEFAULT_COLS;
 
-    // Get next display order
     const maxOrder = await this.db
       .prepare('SELECT MAX(display_order) as max_order FROM drawers WHERE room_id = ?')
       .bind(roomId)
       .first<{ max_order: number | null }>();
     const displayOrder = (maxOrder?.max_order ?? -1) + 1;
 
-    // Create drawer
     await this.db
       .prepare(
         `INSERT INTO drawers (id, room_id, name, rows, cols, grid_x, grid_y, display_order, created_at, updated_at)
@@ -115,7 +111,6 @@ export class DrawerRepository implements IDrawerRepository {
       )
       .run();
 
-    // Create compartments and sub-compartments
     const compartments: Record<string, CompartmentWithSubs> = {};
     const statements: D1PreparedStatement[] = [];
 
@@ -183,6 +178,8 @@ export class DrawerRepository implements IDrawerRepository {
       cols,
       gridX: input.gridX ?? 0,
       gridY: input.gridY ?? 0,
+      compartmentWidth: 3,
+      compartmentHeight: 1,
       displayOrder,
       createdAt: now,
       updatedAt: now,
@@ -194,11 +191,10 @@ export class DrawerRepository implements IDrawerRepository {
     const drawer = await this.findById(id);
     if (!drawer) throw new NotFoundError('Drawer not found');
 
-    // Timestamp-based conflict resolution: skip if incoming update is older
     if (input.updatedAt !== undefined) {
       const storedTime = new Date(drawer.updatedAt).getTime();
       if (input.updatedAt < storedTime) {
-        return null; // Skip - incoming update is older
+        return null;
       }
     }
 
@@ -221,8 +217,6 @@ export class DrawerRepository implements IDrawerRepository {
       values.push(input.gridY);
     }
 
-    // Handle resize (rows/cols) - this is complex, so we'll just update the values
-    // and let the frontend handle the compartment management
     if (input.rows !== undefined) {
       updates.push('rows = ?');
       values.push(input.rows);
@@ -230,6 +224,14 @@ export class DrawerRepository implements IDrawerRepository {
     if (input.cols !== undefined) {
       updates.push('cols = ?');
       values.push(input.cols);
+    }
+    if (input.compartmentWidth !== undefined) {
+      updates.push('compartment_width = ?');
+      values.push(input.compartmentWidth);
+    }
+    if (input.compartmentHeight !== undefined) {
+      updates.push('compartment_height = ?');
+      values.push(input.compartmentHeight);
     }
 
     if (updates.length === 0) return drawer;
@@ -250,6 +252,8 @@ export class DrawerRepository implements IDrawerRepository {
       cols: input.cols ?? drawer.cols,
       gridX: input.gridX ?? drawer.gridX,
       gridY: input.gridY ?? drawer.gridY,
+      compartmentWidth: input.compartmentWidth ?? drawer.compartmentWidth,
+      compartmentHeight: input.compartmentHeight ?? drawer.compartmentHeight,
       updatedAt: timestamp,
     };
   }
@@ -283,11 +287,10 @@ export class CompartmentRepository implements ICompartmentRepository {
     const comp = await this.findById(id);
     if (!comp) throw new NotFoundError('Compartment not found');
 
-    // Timestamp-based conflict resolution: skip if incoming update is older
     if (input.updatedAt !== undefined) {
       const storedTime = new Date(comp.updatedAt).getTime();
       if (input.updatedAt < storedTime) {
-        return null; // Skip - incoming update is older
+        return null;
       }
     }
 
@@ -312,7 +315,6 @@ export class CompartmentRepository implements ICompartmentRepository {
     const comp = await this.findById(compartmentId);
     if (!comp) throw new NotFoundError('Compartment not found');
 
-    // Get existing sub-compartments
     const existingRows = await this.db
       .prepare('SELECT * FROM sub_compartments WHERE compartment_id = ? ORDER BY display_order')
       .bind(compartmentId)
@@ -325,7 +327,6 @@ export class CompartmentRepository implements ICompartmentRepository {
     const result: SubCompartment[] = [];
 
     if (existing.length === targetCount) {
-      // Same count, just redistribute sizes
       const newSize = 1 / targetCount;
       for (const sub of existing) {
         statements.push(
@@ -336,7 +337,6 @@ export class CompartmentRepository implements ICompartmentRepository {
         result.push({ ...sub, relativeSize: newSize, updatedAt: now });
       }
     } else if (existing.length < targetCount) {
-      // Need to add more
       const newSize = 1 / targetCount;
       for (const sub of existing) {
         statements.push(
@@ -369,7 +369,6 @@ export class CompartmentRepository implements ICompartmentRepository {
         });
       }
     } else {
-      // Need to remove some
       const newSize = 1 / targetCount;
       const toKeep = existing.slice(0, targetCount);
       const toRemove = existing.slice(targetCount);
@@ -404,7 +403,6 @@ export class CompartmentRepository implements ICompartmentRepository {
       throw new Error('At least 2 compartments required for merge');
     }
 
-    // Fetch all compartments to be merged
     const placeholders = compartmentIds.map(() => '?').join(',');
     const compartmentRows = await this.db
       .prepare(`SELECT * FROM compartments WHERE id IN (${placeholders}) AND drawer_id = ?`)
@@ -417,7 +415,6 @@ export class CompartmentRepository implements ICompartmentRepository {
 
     const compartments = compartmentRows.results.map(mapRowToCompartment);
 
-    // Get all cells occupied by all selected compartments
     const allCells: Array<{ row: number; col: number }> = [];
     for (const comp of compartments) {
       const compRowSpan = comp.rowSpan ?? 1;
@@ -429,7 +426,6 @@ export class CompartmentRepository implements ICompartmentRepository {
       }
     }
 
-    // Calculate bounding box from all cells
     let minRow = allCells[0].row;
     let maxRow = allCells[0].row;
     let minCol = allCells[0].col;
@@ -444,13 +440,11 @@ export class CompartmentRepository implements ICompartmentRepository {
     const rowSpan = maxRow - minRow + 1;
     const colSpan = maxCol - minCol + 1;
 
-    // Verify cells form a complete rectangle (no gaps)
     const expectedCellCount = rowSpan * colSpan;
     const cellSet = new Set(allCells.map(c => `${c.row},${c.col}`));
     if (cellSet.size !== expectedCellCount) {
       throw new Error('Selection must form a rectangle');
     }
-    // Also verify all expected cells are present
     for (let r = minRow; r <= maxRow; r++) {
       for (let c = minCol; c <= maxCol; c++) {
         if (!cellSet.has(`${r},${c}`)) {
@@ -459,14 +453,12 @@ export class CompartmentRepository implements ICompartmentRepository {
       }
     }
 
-    // Find anchor (top-left) compartment
     const anchor = compartments.find(c => c.row === minRow && c.col === minCol);
     if (!anchor) throw new Error('Anchor compartment not found');
 
     const toDeleteIds = compartmentIds.filter(id => id !== anchor.id);
     const now = new Date().toISOString();
 
-    // Collect all items from compartments being deleted
     const allSubRows = await this.db
       .prepare(`SELECT * FROM sub_compartments WHERE compartment_id IN (${placeholders}) ORDER BY display_order`)
       .bind(...compartmentIds)
@@ -477,7 +469,6 @@ export class CompartmentRepository implements ICompartmentRepository {
 
     const statements: D1PreparedStatement[] = [];
 
-    // Delete sub-compartments of compartments being deleted
     if (toDeleteIds.length > 0) {
       const deletePlaceholders = toDeleteIds.map(() => '?').join(',');
       statements.push(
@@ -485,8 +476,6 @@ export class CompartmentRepository implements ICompartmentRepository {
           .prepare(`DELETE FROM sub_compartments WHERE compartment_id IN (${deletePlaceholders})`)
           .bind(...toDeleteIds)
       );
-
-      // Delete the compartments themselves
       statements.push(
         this.db
           .prepare(`DELETE FROM compartments WHERE id IN (${deletePlaceholders})`)
@@ -494,14 +483,12 @@ export class CompartmentRepository implements ICompartmentRepository {
       );
     }
 
-    // Update anchor with new spans
     statements.push(
       this.db
         .prepare('UPDATE compartments SET row_span = ?, col_span = ?, updated_at = ? WHERE id = ?')
         .bind(rowSpan, colSpan, now, anchor.id)
     );
 
-    // Rebuild sub-compartments for anchor with collected items
     statements.push(
       this.db
         .prepare('DELETE FROM sub_compartments WHERE compartment_id = ?')
@@ -571,7 +558,6 @@ export class CompartmentRepository implements ICompartmentRepository {
       throw new Error('Cannot split a single-cell compartment');
     }
 
-    // Get existing items from this compartment
     const subRows = await this.db
       .prepare('SELECT * FROM sub_compartments WHERE compartment_id = ? ORDER BY display_order')
       .bind(compartmentId)
@@ -584,14 +570,12 @@ export class CompartmentRepository implements ICompartmentRepository {
     const statements: D1PreparedStatement[] = [];
     const result: Array<{ compartment: Compartment; subCompartments: SubCompartment[] }> = [];
 
-    // Delete existing sub-compartments
     statements.push(
       this.db
         .prepare('DELETE FROM sub_compartments WHERE compartment_id = ?')
         .bind(compartmentId)
     );
 
-    // Create new compartments for each cell in the span
     let itemIndex = 0;
     for (let r = 0; r < rowSpan; r++) {
       for (let c = 0; c < colSpan; c++) {
@@ -601,7 +585,6 @@ export class CompartmentRepository implements ICompartmentRepository {
 
         let newCompId: string;
         if (isAnchor) {
-          // Update the anchor to be 1x1
           statements.push(
             this.db
               .prepare('UPDATE compartments SET row_span = 1, col_span = 1, updated_at = ? WHERE id = ?')
@@ -609,7 +592,6 @@ export class CompartmentRepository implements ICompartmentRepository {
           );
           newCompId = compartmentId;
         } else {
-          // Create new compartment
           newCompId = generateId();
           statements.push(
             this.db
@@ -621,11 +603,9 @@ export class CompartmentRepository implements ICompartmentRepository {
           );
         }
 
-        // Create 2 sub-compartments per new compartment
         const subCompartments: SubCompartment[] = [];
         for (let i = 0; i < 2; i++) {
           const subId = generateId();
-          // Put items in anchor cell only
           const item = isAnchor && itemIndex < existingItems.length ? existingItems[itemIndex++] : null;
           statements.push(
             this.db
@@ -692,13 +672,12 @@ export class SubCompartmentRepository implements ISubCompartmentRepository {
 
   async update(id: string, input: UpdateSubCompartmentInput): Promise<SubCompartment | null> {
     const sub = await this.findById(id);
-    if (!sub) throw new NotFoundError('Sub-compartment not found');
+    if (!sub) return null;
 
-    // Timestamp-based conflict resolution: skip if incoming update is older
     if (input.updatedAt !== undefined) {
       const storedTime = new Date(sub.updatedAt).getTime();
       if (input.updatedAt < storedTime) {
-        return null; // Skip - incoming update is older
+        return null;
       }
     }
 
@@ -800,6 +779,8 @@ interface DrawerRow {
   cols: number;
   grid_x: number;
   grid_y: number;
+  compartment_width: number;
+  compartment_height: number;
   display_order: number;
   created_at: string;
   updated_at: string;
@@ -838,6 +819,8 @@ function mapRowToDrawer(row: DrawerRow): Drawer {
     cols: row.cols,
     gridX: row.grid_x,
     gridY: row.grid_y,
+    compartmentWidth: row.compartment_width,
+    compartmentHeight: row.compartment_height,
     displayOrder: row.display_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

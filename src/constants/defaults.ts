@@ -1,6 +1,8 @@
 export const DEFAULT_DRAWER_ROWS = 10;
 export const DEFAULT_DRAWER_COLS = 6;
-export const DEFAULT_DIVIDER_COUNT = 1;
+export const DEFAULT_DIVIDER_COUNT = 0;
+export const DEFAULT_COMPARTMENT_WIDTH = 3; // Grid units (matches legacy ~1:3 aspect ratio)
+export const DEFAULT_COMPARTMENT_HEIGHT = 1; // Grid units
 export const DEFAULT_DIVIDER_ORIENTATION = 'horizontal' as const;
 
 export const COMPARTMENT_WIDTH = 1;
