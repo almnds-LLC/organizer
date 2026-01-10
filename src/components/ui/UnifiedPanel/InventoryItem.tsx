@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import type { InventoryItem as InventoryItemType } from '../../../utils/inventoryHelpers';
 import type { Category } from '../../../types/drawer';
 import { getCategoryColor } from '../../../store/drawerStore';
@@ -5,12 +6,22 @@ import { getCategoryColor } from '../../../store/drawerStore';
 interface InventoryItemProps {
   item: InventoryItemType;
   category: Category | null;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent) => void;
+  onCheckboxClick?: (e: React.MouseEvent) => void;
+  isSelected?: boolean;
   showDrawerName?: boolean;
   showCategory?: boolean;
 }
 
-export function InventoryItem({ item, category, onClick, showDrawerName = true, showCategory = true }: InventoryItemProps) {
+export function InventoryItem({
+  item,
+  category,
+  onClick,
+  onCheckboxClick,
+  isSelected = false,
+  showDrawerName = true,
+  showCategory = true
+}: InventoryItemProps) {
   const categoryColor = category ? getCategoryColor(category) : null;
 
   return (
@@ -22,22 +33,46 @@ export function InventoryItem({ item, category, onClick, showDrawerName = true, 
         gap: '0.75rem',
         width: '100%',
         padding: '0.75rem',
-        background: '#f9fafb',
-        border: 'none',
+        background: isSelected ? '#eff6ff' : '#f9fafb',
+        border: isSelected ? '1px solid #bfdbfe' : '1px solid transparent',
         borderRadius: '0.5rem',
         cursor: 'pointer',
         textAlign: 'left',
         minHeight: 48, // Touch-friendly
-        transition: 'background-color 0.15s ease',
+        transition: 'all 0.15s ease',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = '#f3f4f6';
+        if (!isSelected) {
+          e.currentTarget.style.backgroundColor = '#f3f4f6';
+        }
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = '#f9fafb';
+        if (!isSelected) {
+          e.currentTarget.style.backgroundColor = '#f9fafb';
+        }
       }}
     >
-      {/* Category color chip */}
+      {onCheckboxClick && (
+        <div
+          onClick={onCheckboxClick}
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 4,
+            border: isSelected ? 'none' : '2px solid #d1d5db',
+            backgroundColor: isSelected ? '#3b82f6' : 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          {isSelected && <Check size={12} color="white" strokeWidth={3} />}
+        </div>
+      )}
+
       <div
         style={{
           width: 8,
@@ -48,7 +83,6 @@ export function InventoryItem({ item, category, onClick, showDrawerName = true, 
         }}
       />
 
-      {/* Item info */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
@@ -83,7 +117,6 @@ export function InventoryItem({ item, category, onClick, showDrawerName = true, 
         </div>
       </div>
 
-      {/* Quantity badge */}
       {item.item.quantity !== undefined && item.item.quantity > 1 && (
         <div
           style={{
@@ -100,7 +133,6 @@ export function InventoryItem({ item, category, onClick, showDrawerName = true, 
         </div>
       )}
 
-      {/* Chevron */}
       <svg
         width="16"
         height="16"

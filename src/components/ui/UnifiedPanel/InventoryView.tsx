@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Search, X } from 'lucide-react';
+import { useMemo, useCallback } from 'react';
+import { Search, X, CheckSquare, Square } from 'lucide-react';
 import { useDrawerStore, getCategoryColor } from '../../../store/drawerStore';
 import {
   aggregateInventory,
@@ -19,23 +19,25 @@ export function InventoryView() {
   const searchQuery = useDrawerStore((s) => s.searchQuery);
   const setSearchQuery = useDrawerStore((s) => s.setSearchQuery);
   const searchMatchIds = useDrawerStore((s) => s.searchMatchIds);
+  const selectedInventoryIds = useDrawerStore((s) => s.selectedInventoryIds);
+  const toggleInventorySelection = useDrawerStore((s) => s.toggleInventorySelection);
+  const clearInventorySelection = useDrawerStore((s) => s.clearInventorySelection);
+  const selectAllInventory = useDrawerStore((s) => s.selectAllInventory);
 
-  // Aggregate all items
   const allItems = useMemo(
     () => aggregateInventory(drawers, drawerOrder),
     [drawers, drawerOrder]
   );
 
-  // Filter items based on search
   const filteredItems = useMemo(() => {
     if (!searchQuery) {
       return allItems;
     }
-    // Filter to only items that match the search (empty if no matches)
-    return allItems.filter((item) => searchMatchIds.has(item.compartmentId));
+    return allItems.filter((item) =>
+      searchMatchIds.has(`${item.compartmentId}:${item.subCompartmentId}`)
+    );
   }, [allItems, searchQuery, searchMatchIds]);
 
-  // Group items based on selected grouping (use filtered items)
   const categoryGroups = useMemo(() => {
     if (inventoryGrouping === 'category') {
       return groupByCategory(filteredItems, categories);
@@ -50,13 +52,49 @@ export function InventoryView() {
     return null;
   }, [filteredItems, inventoryGrouping, drawers, drawerOrder]);
 
-  const handleItemClick = (item: InventoryItemType) => {
-    navigateToItem(item.drawerId, item.compartmentId);
+  const getSelectionKey = (item: InventoryItemType) => {
+    return `${item.drawerId}:${item.compartmentId}:${item.subCompartmentId}`;
+  };
+
+  const selectedCount = useMemo(() => {
+    return filteredItems.filter((item) => selectedInventoryIds.has(getSelectionKey(item))).length;
+  }, [filteredItems, selectedInventoryIds]);
+
+  const isAllSelected = selectedCount > 0 && selectedCount === filteredItems.length;
+  const isSomeSelected = selectedCount > 0 && selectedCount < filteredItems.length;
+
+  const handleItemClick = (item: InventoryItemType, e: React.MouseEvent) => {
+    // Shift+click or if in selection mode, toggle selection
+    if (e.shiftKey || selectedInventoryIds.size > 0) {
+      toggleInventorySelection(item.drawerId, item.compartmentId, item.subCompartmentId);
+    } else {
+      navigateToItem(item.drawerId, item.compartmentId);
+    }
+  };
+
+  const handleSelectAll = useCallback(() => {
+    // If all are selected, clear selection; otherwise select all filtered items
+    if (isAllSelected) {
+      clearInventorySelection();
+    } else {
+      // Select all filtered items
+      selectAllInventory(
+        filteredItems.map((item) => ({
+          drawerId: item.drawerId,
+          compartmentId: item.compartmentId,
+          subCompartmentId: item.subCompartmentId,
+        }))
+      );
+    }
+  }, [isAllSelected, filteredItems, clearInventorySelection, selectAllInventory]);
+
+  const handleCheckboxClick = (item: InventoryItemType, e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleInventorySelection(item.drawerId, item.compartmentId, item.subCompartmentId);
   };
 
   return (
     <div style={{ padding: '0 1rem 1rem' }}>
-      {/* Header */}
       <div
         style={{
           display: 'flex',
@@ -70,23 +108,67 @@ export function InventoryView() {
           zIndex: 1,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
-          Inventory
-          <span
-            style={{
-              marginLeft: '0.5rem',
-              fontSize: '0.875rem',
-              fontWeight: 400,
-              color: '#6b7280',
-            }}
-          >
-            {searchQuery && filteredItems.length !== allItems.length
-              ? `(${filteredItems.length} of ${allItems.length})`
-              : `(${allItems.length} ${allItems.length === 1 ? 'item' : 'items'})`}
-          </span>
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+            Inventory
+            <span
+              style={{
+                marginLeft: '0.5rem',
+                fontSize: '0.875rem',
+                fontWeight: 400,
+                color: '#6b7280',
+              }}
+            >
+              {searchQuery && filteredItems.length !== allItems.length
+                ? `(${filteredItems.length} of ${allItems.length})`
+                : `(${allItems.length} ${allItems.length === 1 ? 'item' : 'items'})`}
+            </span>
+          </h2>
 
-        {/* Search input */}
+          {filteredItems.length > 0 && (
+            <button
+              onClick={handleSelectAll}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                padding: '0.375rem 0.625rem',
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+                color: selectedCount > 0 ? '#3b82f6' : '#6b7280',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                transition: 'color 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#3b82f6';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = selectedCount > 0 ? '#3b82f6' : '#6b7280';
+              }}
+            >
+              {isAllSelected ? (
+                <>
+                  <CheckSquare size={14} />
+                  Clear
+                </>
+              ) : isSomeSelected ? (
+                <>
+                  <CheckSquare size={14} style={{ opacity: 0.5 }} />
+                  Select All
+                </>
+              ) : (
+                <>
+                  <Square size={14} />
+                  Select All
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
         <div
           style={{
             position: 'relative',
@@ -145,7 +227,6 @@ export function InventoryView() {
           )}
         </div>
 
-        {/* Grouping toggle */}
         <div
           style={{
             display: 'flex',
@@ -179,7 +260,6 @@ export function InventoryView() {
         </div>
       </div>
 
-      {/* Empty state */}
       {allItems.length === 0 && (
         <div
           style={{
@@ -210,7 +290,6 @@ export function InventoryView() {
         </div>
       )}
 
-      {/* No search results */}
       {allItems.length > 0 && searchQuery && filteredItems.length === 0 && (
         <div
           style={{
@@ -227,12 +306,10 @@ export function InventoryView() {
         </div>
       )}
 
-      {/* Grouped by category */}
       {inventoryGrouping === 'category' && categoryGroups && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {Array.from(categoryGroups.entries()).map(([categoryId, { category, items }]) => (
             <div key={categoryId ?? 'uncategorized'}>
-              {/* Section header */}
               <div
                 style={{
                   display: 'flex',
@@ -259,14 +336,15 @@ export function InventoryView() {
                 </span>
               </div>
 
-              {/* Items */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {items.map((item) => (
                   <InventoryItem
                     key={item.id}
                     item={item}
                     category={category}
-                    onClick={() => handleItemClick(item)}
+                    onClick={(e) => handleItemClick(item, e)}
+                    onCheckboxClick={(e) => handleCheckboxClick(item, e)}
+                    isSelected={selectedInventoryIds.has(getSelectionKey(item))}
                     showDrawerName={true}
                     showCategory={false}
                   />
@@ -277,12 +355,10 @@ export function InventoryView() {
         </div>
       )}
 
-      {/* Grouped by drawer */}
       {inventoryGrouping === 'drawer' && drawerGroups && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {Array.from(drawerGroups.entries()).map(([drawerId, { drawer, items }]) => (
             <div key={drawerId}>
-              {/* Section header */}
               <div
                 style={{
                   display: 'flex',
@@ -315,14 +391,15 @@ export function InventoryView() {
                 </span>
               </div>
 
-              {/* Items */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {items.map((item) => (
                   <InventoryItem
                     key={item.id}
                     item={item}
                     category={item.categoryId ? categories[item.categoryId] : null}
-                    onClick={() => handleItemClick(item)}
+                    onClick={(e) => handleItemClick(item, e)}
+                    onCheckboxClick={(e) => handleCheckboxClick(item, e)}
+                    isSelected={selectedInventoryIds.has(getSelectionKey(item))}
                     showDrawerName={false}
                   />
                 ))}
@@ -332,7 +409,6 @@ export function InventoryView() {
         </div>
       )}
 
-      {/* Flat list */}
       {inventoryGrouping === 'flat' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {filteredItems.map((item) => (
@@ -340,7 +416,9 @@ export function InventoryView() {
               key={item.id}
               item={item}
               category={item.categoryId ? categories[item.categoryId] : null}
-              onClick={() => handleItemClick(item)}
+              onClick={(e) => handleItemClick(item, e)}
+              onCheckboxClick={(e) => handleCheckboxClick(item, e)}
+              isSelected={selectedInventoryIds.has(getSelectionKey(item))}
               showDrawerName={true}
             />
           ))}

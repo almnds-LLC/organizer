@@ -5,7 +5,6 @@ import { CompartmentMesh } from './CompartmentMesh';
 import { useDrawerStore } from '../../store/drawerStore';
 import { useCursorStore } from '../../store/cursorStore';
 import {
-  COMPARTMENT_WIDTH,
   COMPARTMENT_HEIGHT,
   COMPARTMENT_DEPTH,
   COMPARTMENT_GAP,
@@ -29,14 +28,12 @@ export function DrawerGrid({ drawer }: DrawerGridProps) {
   const remoteCursors = useCursorStore((s) => s.remoteCursors);
   const isActive = selectedDrawerIds.has(drawer.id);
 
-  // Find collaborators who have this drawer open
   const collaboratorsInDrawer = useMemo(() => {
     return Array.from(remoteCursors.values()).filter(
       (c) => c.drawerId === drawer.id
     );
   }, [remoteCursors, drawer.id]);
 
-  // Only show collaborator indicators if we're not inside this drawer
   const showCollaboratorIndicators = activeDrawerId !== drawer.id && collaboratorsInDrawer.length > 0;
 
   const compartments = useMemo(
@@ -44,26 +41,24 @@ export function DrawerGrid({ drawer }: DrawerGridProps) {
     [drawer.compartments]
   );
 
-  const cellWidth = COMPARTMENT_WIDTH + COMPARTMENT_GAP;
-  const cellHeight = COMPARTMENT_HEIGHT + COMPARTMENT_GAP;
+  const compWidthUnits = drawer.compartmentWidth ?? 3;
+  const compHeightUnits = drawer.compartmentHeight ?? 1;
+  const scaledCompWidth = compWidthUnits * COMPARTMENT_HEIGHT;
+  const scaledCompHeight = compHeightUnits * COMPARTMENT_HEIGHT;
+  const cellWidth = scaledCompWidth + COMPARTMENT_GAP;
+  const cellHeight = scaledCompHeight + COMPARTMENT_GAP;
 
-  // Cabinet dimensions including label strips and name label
-  const cabinetWidth = drawer.cols * cellWidth + COMPARTMENT_GAP + LABEL_STRIP_WIDTH;
+  const frameInnerPadding = 0.1;
+  const cabinetWidth = drawer.cols * cellWidth + COMPARTMENT_GAP + LABEL_STRIP_WIDTH + frameInnerPadding;
   const cabinetHeight = drawer.rows * cellHeight + COMPARTMENT_GAP + LABEL_STRIP_HEIGHT + NAME_LABEL_HEIGHT;
   const cabinetDepth = COMPARTMENT_DEPTH + 0.15;
 
-  // Center offset for drawer compartments
   const centerX = (drawer.cols - 1) * cellWidth / 2;
   const centerY = (drawer.rows - 1) * cellHeight / 2;
-
-  // Cabinet center (offset to account for label strips and name)
   const cabinetCenterX = centerX - LABEL_STRIP_WIDTH / 2;
   const cabinetCenterY = centerY + (LABEL_STRIP_HEIGHT + NAME_LABEL_HEIGHT) / 2;
-
-  // Name label position (above the cabinet)
   const nameLabelY = drawer.rows * cellHeight - cellHeight / 2 + COMPARTMENT_GAP / 2 + LABEL_STRIP_HEIGHT + NAME_LABEL_HEIGHT / 2;
 
-  // Inner compartment area dimensions (where drawers sit)
   const innerWidth = drawer.cols * cellWidth - COMPARTMENT_GAP;
   const innerHeight = drawer.rows * cellHeight - COMPARTMENT_GAP;
   const innerCenterX = centerX;
@@ -183,6 +178,8 @@ export function DrawerGrid({ drawer }: DrawerGridProps) {
           compartment={compartment}
           drawerId={drawer.id}
           totalRows={drawer.rows}
+          baseWidth={scaledCompWidth}
+          baseHeight={scaledCompHeight}
         />
       ))}
     </group>

@@ -10,7 +10,6 @@ import { TouchInterceptor } from './TouchInterceptor';
 import { useDrawerStore } from '../../store/drawerStore';
 import type { Drawer } from '../../types/drawer';
 import {
-  COMPARTMENT_WIDTH,
   COMPARTMENT_GAP,
   COMPARTMENT_HEIGHT,
   LABEL_STRIP_WIDTH,
@@ -18,25 +17,30 @@ import {
   NAME_LABEL_HEIGHT,
 } from '../../constants/defaults';
 
-const CELL_WIDTH = COMPARTMENT_WIDTH + COMPARTMENT_GAP;
-const CELL_HEIGHT = COMPARTMENT_HEIGHT + COMPARTMENT_GAP;
-const GRID_UNIT_X = (COMPARTMENT_WIDTH + COMPARTMENT_GAP) / 3;
-const GRID_UNIT_Y = COMPARTMENT_HEIGHT + COMPARTMENT_GAP;
+function getDrawerCellDimensions(drawer: Drawer) {
+  const widthUnits = drawer.compartmentWidth ?? 3;
+  const heightUnits = drawer.compartmentHeight ?? 1;
+  const compartmentWidth = widthUnits * COMPARTMENT_HEIGHT;
+  const compartmentHeight = heightUnits * COMPARTMENT_HEIGHT;
+  const cellWidth = compartmentWidth + COMPARTMENT_GAP;
+  const cellHeight = compartmentHeight + COMPARTMENT_GAP;
+  return { cellWidth, cellHeight };
+}
+
+const GRID_UNIT = COMPARTMENT_HEIGHT;
 
 function getDrawerWorldPosition(drawer: Drawer): [number, number, number] {
-  const x = drawer.gridX * GRID_UNIT_X;
-  const y = drawer.gridY * GRID_UNIT_Y;
+  const x = drawer.gridX * GRID_UNIT;
+  const y = drawer.gridY * GRID_UNIT;
   return [x, y, 0];
 }
 
-// Convert world position to grid position (allows negative positions for infinite grid)
 function worldToGrid(worldX: number, worldY: number): { gridX: number; gridY: number } {
-  const gridX = Math.round(worldX / GRID_UNIT_X);
-  const gridY = Math.round(worldY / GRID_UNIT_Y);
+  const gridX = Math.round(worldX / GRID_UNIT);
+  const gridY = Math.round(worldY / GRID_UNIT);
   return { gridX, gridY };
 }
 
-// Calculate bounds of all drawers
 function calculateSceneBounds(drawers: Drawer[]): {
   minX: number;
   maxX: number;
@@ -56,8 +60,9 @@ function calculateSceneBounds(drawers: Drawer[]): {
 
   drawers.forEach((drawer) => {
     const [x, y] = getDrawerWorldPosition(drawer);
-    const drawerWidth = drawer.cols * CELL_WIDTH;
-    const drawerHeight = drawer.rows * CELL_HEIGHT;
+    const { cellWidth, cellHeight } = getDrawerCellDimensions(drawer);
+    const drawerWidth = drawer.cols * cellWidth;
+    const drawerHeight = drawer.rows * cellHeight;
 
     minX = Math.min(minX, x);
     maxX = Math.max(maxX, x + drawerWidth);
@@ -83,7 +88,6 @@ function calculateSceneBounds(drawers: Drawer[]): {
   };
 }
 
-// Drag state type
 interface DragState {
   drawerId: string;
   startWorldX: number;
@@ -92,7 +96,6 @@ interface DragState {
   startGridY: number;
 }
 
-// Hook to convert screen coords to world coords
 function useScreenToWorld() {
   const { camera, gl } = useThree();
 
@@ -108,7 +111,6 @@ function useScreenToWorld() {
   }, [camera, gl]);
 }
 
-// Background plane for click-to-deselect
 function BackgroundPlane({
   bounds,
   dragState,
@@ -170,9 +172,9 @@ function DraggableDrawer({
   const screenToWorld = useScreenToWorld();
   const isDragging = dragState?.drawerId === drawer.id;
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startEventRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const dragStartedRef = useRef(false);
   const lastClickTimeRef = useRef(0);
+  const startEventRef = useRef<{ clientX: number; clientY: number } | null>(null);
 
   const basePosition = useMemo(() => getDrawerWorldPosition(drawer), [drawer]);
 
@@ -187,10 +189,11 @@ function DraggableDrawer({
     return basePosition;
   }, [basePosition, isDragging, currentOffset]);
 
-  const handleWidth = drawer.cols * CELL_WIDTH;
+  const { cellWidth, cellHeight } = getDrawerCellDimensions(drawer);
+  const handleWidth = drawer.cols * cellWidth;
   const handleHeight = 0.35;
-  const handleY = drawer.rows * CELL_HEIGHT - CELL_HEIGHT / 2 + COMPARTMENT_GAP / 2 + 0.25 + 0.15;
-  const handleX = (drawer.cols - 1) * CELL_WIDTH / 2;
+  const handleY = drawer.rows * cellHeight - cellHeight / 2 + COMPARTMENT_GAP / 2 + 0.25 + 0.15;
+  const handleX = (drawer.cols - 1) * cellWidth / 2;
 
   const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -207,7 +210,6 @@ function DraggableDrawer({
     }, 150);
   }, [drawer.id, onDragStart, screenToWorld]);
 
-  // Handle tap detection on pointer up - simpler approach like CompartmentMesh
   const handlePointerUp = useCallback((e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
 
@@ -216,7 +218,6 @@ function DraggableDrawer({
       holdTimerRef.current = null;
     }
 
-    // Only process tap if we haven't started dragging
     if (!dragStartedRef.current) {
       const now = Date.now();
       const timeSinceLastClick = now - lastClickTimeRef.current;
@@ -281,15 +282,16 @@ function DragGhost({
   isValid: boolean;
 }) {
   const position: [number, number, number] = useMemo(() => {
-    const x = targetGridX * GRID_UNIT_X;
-    const y = targetGridY * GRID_UNIT_Y;
+    const x = targetGridX * GRID_UNIT;
+    const y = targetGridY * GRID_UNIT;
     return [x, y, -0.1];
   }, [targetGridX, targetGridY]);
 
-  const cabinetWidth = drawer.cols * CELL_WIDTH + COMPARTMENT_GAP + LABEL_STRIP_WIDTH;
-  const cabinetHeight = drawer.rows * CELL_HEIGHT + COMPARTMENT_GAP + LABEL_STRIP_HEIGHT + NAME_LABEL_HEIGHT;
-  const centerX = (drawer.cols - 1) * CELL_WIDTH / 2;
-  const centerY = (drawer.rows - 1) * CELL_HEIGHT / 2;
+  const { cellWidth, cellHeight } = getDrawerCellDimensions(drawer);
+  const cabinetWidth = drawer.cols * cellWidth + COMPARTMENT_GAP + LABEL_STRIP_WIDTH;
+  const cabinetHeight = drawer.rows * cellHeight + COMPARTMENT_GAP + LABEL_STRIP_HEIGHT + NAME_LABEL_HEIGHT;
+  const centerX = (drawer.cols - 1) * cellWidth / 2;
+  const centerY = (drawer.rows - 1) * cellHeight / 2;
   const cabinetCenterX = centerX - LABEL_STRIP_WIDTH / 2;
   const cabinetCenterY = centerY + (LABEL_STRIP_HEIGHT + NAME_LABEL_HEIGHT) / 2;
 
@@ -482,7 +484,6 @@ export function DrawerScene() {
 
   const bounds = useMemo(() => calculateSceneBounds(drawers), [drawers]);
 
-  // Capture initial camera values - computed once when drawers first become available
   const [initialCamera] = useState<{ center: [number, number, number]; zoom: number } | null>(() => {
     if (drawers.length === 0) return null;
     const maxDimension = Math.max(bounds.width, bounds.height);

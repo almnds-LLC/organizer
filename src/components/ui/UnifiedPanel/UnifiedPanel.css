@@ -128,6 +128,7 @@
 .panel-view.active {
   opacity: 1;
   pointer-events: auto;
+  overflow-y: auto;
 }
 
 /* Slide animation between modes */
@@ -293,24 +294,47 @@
 .inline-color {
   width: 20px;
   height: 20px;
-  border: 2px solid transparent;
+  border: none;
   border-radius: 50%;
   cursor: pointer;
-  transition: all 0.1s ease;
+  transition: filter 0.1s ease, box-shadow 0.15s ease;
   padding: 0;
   font-size: 0.625rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  position: relative;
 }
 
 .inline-color:hover {
-  transform: scale(1.15);
+  filter: brightness(1.1);
 }
 
 .inline-color.active {
-  border-color: #111827;
-  box-shadow: 0 0 0 1px white;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25);
+}
+
+/* Checkmark for selected */
+.inline-color::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 4px;
+  border: 1.5px solid white;
+  border-top: none;
+  border-right: none;
+  transform: translate(-50%, -60%) rotate(-45deg) scale(0);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+  opacity: 0;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.inline-color.active::after {
+  transform: translate(-50%, -60%) rotate(-45deg) scale(1);
+  opacity: 1;
 }
 
 .inline-color-add {
@@ -327,7 +351,9 @@
 }
 
 .inline-qty input {
-  width: 40px;
+  width: 100%;
+  max-width: 60px;
+  min-width: 40px;
   padding: 0.25rem;
   border: none;
   border-radius: 0.25rem;
@@ -455,46 +481,6 @@
   flex-direction: column;
 }
 
-/* Divider controls */
-.divider-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-}
-
-.divider-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 0.25rem;
-  color: #374151;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.divider-btn:hover:not(:disabled) {
-  border-color: #3b82f6;
-  color: #3b82f6;
-}
-
-.divider-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.divider-count {
-  font-size: 0.75rem;
-  color: #6b7280;
-  min-width: 60px;
-  text-align: center;
-}
-
 /* Utility classes */
 .divider {
   border: none;
@@ -509,16 +495,6 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin: 0 0 1rem 0;
-}
-
-.mass-edit-info {
-  font-size: 0.875rem;
-  color: #6b7280;
-  margin: 0 0 1.5rem 0;
-  padding: 0.75rem;
-  background: #f3f4f6;
-  border-radius: 0.5rem;
-  text-align: center;
 }
 
 .no-selection-info {
@@ -539,10 +515,3 @@
   flex: 1;
 }
 
-/* Merge error message */
-.merge-error {
-  font-size: 0.75rem;
-  color: #9ca3af;
-  margin: 0.5rem 0 0;
-  text-align: center;
-}

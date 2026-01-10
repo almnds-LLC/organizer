@@ -131,7 +131,7 @@ class WebRTCManager {
         sdp: offer,
       });
     } catch (error) {
-      console.error('Error creating offer:', error);
+      console.error('Failed to create WebRTC offer:', error);
       this.scheduleReconnect(userId, username);
     }
   }
@@ -162,7 +162,6 @@ class WebRTCManager {
     const attempts = peer?.reconnectAttempts ?? 0;
 
     if (attempts >= this.MAX_RECONNECT_ATTEMPTS) {
-      console.warn(`Max reconnect attempts reached for peer ${userId}`);
       this.removePeer(userId);
       return;
     }
@@ -282,7 +281,7 @@ class WebRTCManager {
         sdp: answer,
       });
     } catch (error) {
-      console.error('Error handling offer:', error);
+      console.error('Failed to handle WebRTC offer:', error);
       this.scheduleReconnect(senderId, senderUsername);
     }
   }
@@ -301,7 +300,7 @@ class WebRTCManager {
       }
       peer.pendingCandidates = [];
     } catch (error) {
-      console.error('Error handling answer:', error);
+      console.error('Failed to handle WebRTC answer:', error);
       this.removePeer(senderId);
     }
   }
@@ -323,14 +322,12 @@ class WebRTCManager {
     try {
       await peer.connection.addIceCandidate(candidate);
     } catch (error) {
-      console.error('Error adding ICE candidate:', error);
+      console.error('Failed to add ICE candidate:', error);
     }
   }
 
   private setupDataChannel(channel: RTCDataChannel, peerId: string, peerUsername: string): void {
-    channel.onopen = () => {
-      // Data channel is now ready for communication
-    };
+    channel.onopen = () => {};
 
     channel.onmessage = (event) => {
       try {
@@ -338,8 +335,8 @@ class WebRTCManager {
         if (data.type === 'cursor') {
           this.cursorHandlers.forEach(h => h(peerId, peerUsername, data.position));
         }
-      } catch {
-        // Ignore malformed messages
+      } catch (error) {
+        console.error('Failed to parse WebRTC message:', error);
       }
     };
 
@@ -352,9 +349,7 @@ class WebRTCManager {
       }
     };
 
-    channel.onerror = (error) => {
-      console.error('Data channel error:', error);
-    };
+    channel.onerror = () => {};
   }
 
   private removePeer(userId: string): void {
@@ -385,10 +380,6 @@ class WebRTCManager {
   onCursorUpdate(handler: CursorUpdateHandler): () => void {
     this.cursorHandlers.add(handler);
     return () => this.cursorHandlers.delete(handler);
-  }
-
-  getPeerCount(): number {
-    return this.peers.size;
   }
 }
 

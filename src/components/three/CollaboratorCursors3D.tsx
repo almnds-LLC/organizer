@@ -12,7 +12,6 @@ export function CursorTracker() {
   const raycaster = useRef(new THREE.Raycaster());
   const mouseNDC = useRef(new THREE.Vector2());
   const worldPoint = useRef(new THREE.Vector3());
-  // Plane at z=0 facing the camera (normal pointing in +z direction)
   const groundPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0));
 
   useEffect(() => {
@@ -53,13 +52,10 @@ export function CursorTracker() {
   return null;
 }
 
-// Project world coordinates to screen coordinates for the HTML cursor overlay
 export function CursorProjector() {
   const { camera, gl } = useThree();
   const vectorRef = useRef(new THREE.Vector3());
 
-  // Use useFrame to project world coords to screen coords every frame
-  // Access store directly via getState() to avoid stale closure issues
   useFrame(() => {
     const { remoteCursors, updateScreenPositions } = useCursorStore.getState();
     if (remoteCursors.size === 0) return;

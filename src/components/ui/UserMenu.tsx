@@ -29,7 +29,6 @@ export function UserMenu() {
 
   const currentRoom = rooms.find(r => r.id === currentRoomId);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     if (!isOpen) return;
 
@@ -43,7 +42,6 @@ export function UserMenu() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  // Focus input when creating room
   useEffect(() => {
     if (isCreatingRoom && inputRef.current) {
       inputRef.current.focus();
@@ -154,7 +152,6 @@ export function UserMenu() {
               </div>
             </div>
 
-            {/* Pending Invitations */}
             {invitations.length > 0 && (
               <>
                 <div className={styles['user-menu-section-title']}>Invitations ({invitations.length})</div>
@@ -244,7 +241,6 @@ export function UserMenu() {
               </button>
             )}
 
-            {/* Room Settings */}
             {currentRoom && (
               <>
                 <div className={styles['user-menu-divider']} />

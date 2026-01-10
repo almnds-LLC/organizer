@@ -59,19 +59,16 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
     | null
   >(null);
 
-  // Get available roles based on user's role (can only invite up to your own level)
-  const getAvailableRoles = (): Array<'owner' | 'editor' | 'viewer'> => {
+  const availableRoles = (() => {
     if (!currentRoom) return [];
     switch (currentRoom.role) {
-      case 'owner': return ['owner', 'editor', 'viewer'];
-      case 'editor': return ['editor', 'viewer'];
-      case 'viewer': return ['viewer'];
-      default: return [];
+      case 'owner': return ['owner', 'editor', 'viewer'] as const;
+      case 'editor': return ['editor', 'viewer'] as const;
+      case 'viewer': return ['viewer'] as const;
+      default: return [] as const;
     }
-  };
-  const availableRoles = getAvailableRoles();
+  })();
 
-  // Load members and pending invites when modal opens
   const loadMembersAndInvites = useCallback(async () => {
     if (!currentRoomId) return;
     setIsLoadingMembers(true);
@@ -84,19 +81,18 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
         try {
           const invites = await getPendingInvitations(currentRoomId);
           setPendingInvites(invites);
-        } catch {
-          // Silently fail if user doesn't have permission
+        } catch (error) {
+          console.error('Failed to load pending invitations:', error);
           setPendingInvites([]);
         }
       }
-    } catch (err) {
-      console.error('Failed to load members:', err);
+    } catch (error) {
+      console.error('Failed to load members:', error);
     } finally {
       setIsLoadingMembers(false);
     }
   }, [currentRoomId, getMembers, getPendingInvitations, canInviteUsers]);
 
-  // Reset state when modal opens
   useEffect(() => {
     if (isOpen && currentRoomId) {
       setRoomName(currentRoom?.name || '');
@@ -217,7 +213,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
     }
   };
 
-  // Get role level for comparison
   const roleLevel = (role: string): number => {
     switch (role) {
       case 'owner': return 3;
@@ -227,7 +222,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
     }
   };
 
-  // Can remove a member if you're owner, or if you outrank them
   const canRemoveMember = (member: RoomMember): boolean => {
     if (!currentRoom || !user) return false;
     if (member.userId === user.id) return false;
@@ -239,7 +233,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
     <Modal isOpen={isOpen} onClose={onClose} title="Room Settings" className={styles.modal}>
       {error && <div className={styles.error}>{error}</div>}
 
-      {/* Room Name */}
       <div className={styles.section}>
         <h3>Room Name</h3>
         {isOwner ? (
@@ -263,7 +256,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
         )}
       </div>
 
-      {/* Members */}
       <div className={styles.section}>
         <h3>Members</h3>
         {isLoadingMembers ? (
@@ -280,7 +272,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
                   <span className={`${styles.memberRole} ${styles[`role${member.role.charAt(0).toUpperCase()}${member.role.slice(1)}`]}`}>
                     {member.role}
                   </span>
-                  {/* Can invite toggle for non-owners */}
                   {isOwner && member.role !== 'owner' && (
                     <div className={`${styles.canInvitePill} ${member.canInvite ? styles.active : ''}`}>
                       <Switch
@@ -310,7 +301,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
               </li>
             ))}
 
-            {/* Pending invites */}
             {pendingInvites.map((invite) => (
               <li key={invite.id} className={`${styles.memberItem} ${styles.pendingInvite}`}>
                 <div className={styles.memberInfo}>
@@ -338,7 +328,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
           </ul>
         )}
 
-        {/* Invite form - separate from members list */}
         {canInviteUsers && (
           <form className={styles.inviteFormStandalone} onSubmit={handleInvite}>
             <div className={styles.inviteInputRow}>
@@ -362,7 +351,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
               </select>
             </div>
             <div className={styles.inviteOptionsRow}>
-              {/* Only owners can grant can_invite permission */}
               {isOwner && (
                 <div className={`${styles.canInvitePill} ${inviteForm.canInvite ? styles.active : ''}`}>
                   <Switch
@@ -385,7 +373,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
         )}
       </div>
 
-      {/* Danger Zone - only show if user can delete or leave */}
       {showDangerZone && (
         <div className={`${styles.section} ${styles.dangerZone}`}>
           <h3>Danger Zone</h3>
@@ -449,7 +436,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
         </div>
       )}
 
-      {/* Remove member confirmation dialog */}
       {confirmDialog?.type === 'removeMember' && (
         <div className={styles.confirmOverlay} onClick={() => setConfirmDialog(null)}>
           <div className={styles.confirmDialog} onClick={(e) => e.stopPropagation()}>
@@ -476,7 +462,6 @@ export function RoomSettingsModal({ isOpen, onClose }: RoomSettingsModalProps) {
         </div>
       )}
 
-      {/* Cancel invite confirmation dialog */}
       {confirmDialog?.type === 'cancelInvite' && (
         <div className={styles.confirmOverlay} onClick={() => setConfirmDialog(null)}>
           <div className={styles.confirmDialog} onClick={(e) => e.stopPropagation()}>

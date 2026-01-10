@@ -1,9 +1,10 @@
 import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { useDrawerStore, getCategoryColor } from '../../../store/drawerStore';
 import { getContrastColor } from '../../../utils/colorHelpers';
-import { canMergeCompartments, canSplitCompartment } from '../../../utils/compartmentHelpers';
+import { canSplitCompartment } from '../../../utils/compartmentHelpers';
 import { useIsMobile } from '../../../hooks/useMediaQuery';
-import type { StoredItem, Compartment, Drawer, Category, SubCompartment } from '../../../types/drawer';
+import { DEFAULT_COMPARTMENT_WIDTH, DEFAULT_COMPARTMENT_HEIGHT } from '../../../constants/defaults';
+import type { StoredItem, Drawer, Category, SubCompartment } from '../../../types/drawer';
 import { ChevronLeft } from 'lucide-react';
 
 export function EditView() {
@@ -12,25 +13,25 @@ export function EditView() {
     selectedDrawerIds,
     selectedSubCompartmentId,
     categories,
-    clearSelection,
+    getOrderedCategories,
     clearDrawerSelection,
     updateItem,
     setDividerCount,
     setDividerOrientation,
-    setDividerCountForSelected,
-    applyToSelected,
     setCategoryModalOpen,
     exitEditMode,
     drawers,
     activeDrawerId,
     renameDrawer,
     resizeDrawer,
+    setCompartmentSize,
+    duplicateDrawer,
     removeDrawer,
-    drawerOrder,
     selectSubCompartment,
-    mergeSelectedCompartments,
     splitCompartment,
   } = useDrawerStore();
+
+  const orderedCategories = getOrderedCategories();
 
   const isMobile = useIsMobile();
 
@@ -40,7 +41,6 @@ export function EditView() {
   );
 
   const isSingleEdit = selectedCompartmentIds.size === 1;
-  const isMassEdit = selectedCompartmentIds.size > 1;
   const isDrawerEdit = selectedDrawerIds.size > 0;
 
   const selectedDrawer = useMemo(() => {
@@ -63,7 +63,6 @@ export function EditView() {
 
   const selectedSub = selectedCompartment?.subCompartments[selectedSubIndex];
 
-  // Track compartment for cleanup
   const lastEditRef = useRef<{ compartmentId: string; drawerId: string } | null>(null);
 
   useEffect(() => {
@@ -113,37 +112,34 @@ export function EditView() {
     setDividerOrientation(selectedCompartment.id, newOrientation);
   }, [selectedCompartment, setDividerOrientation]);
 
-  const handleBack = useCallback(() => {
-    exitEditMode();
-  }, [exitEditMode]);
-
   const handleDrawerDelete = useCallback(() => {
     if (!selectedDrawer) return;
-    if (drawerOrder.length <= 1) {
-      alert('Cannot delete the last drawer');
-      return;
-    }
     if (confirm(`Delete "${selectedDrawer.name}"? This cannot be undone.`)) {
       removeDrawer(selectedDrawer.id);
       clearDrawerSelection();
       exitEditMode();
     }
-  }, [selectedDrawer, drawerOrder.length, removeDrawer, clearDrawerSelection, exitEditMode]);
+  }, [selectedDrawer, removeDrawer, clearDrawerSelection, exitEditMode]);
 
   return (
     <div className="edit-view">
       <div className="edit-view-header">
-        <button className="back-button" onClick={handleBack}>
+        <button className="back-button" onClick={exitEditMode}>
           <ChevronLeft size={20} />
         </button>
         <h2>
-          {isDrawerEdit
-            ? (selectedDrawerIds.size === 1 ? selectedDrawer?.name || 'Drawer' : `${selectedDrawerIds.size} Drawers`)
-            : isSingleEdit && selectedCompartment
-              ? `${String.fromCharCode(65 + selectedCompartment.col)}${selectedCompartment.row + 1}`
-              : isMassEdit
-                ? `${selectedCompartmentIds.size} Compartments`
-                : 'Edit'}
+          {(() => {
+            if (isDrawerEdit) {
+              if (selectedDrawerIds.size === 1) {
+                return selectedDrawer?.name || 'Drawer';
+              }
+              return `${selectedDrawerIds.size} Drawers`;
+            }
+            if (isSingleEdit && selectedCompartment) {
+              return `${String.fromCharCode(65 + selectedCompartment.col)}${selectedCompartment.row + 1}`;
+            }
+            return 'Edit';
+          })()}
         </h2>
       </div>
 
@@ -173,7 +169,7 @@ export function EditView() {
                         key={selectedSub.id}
                         subCompartment={selectedSub}
                         compartmentId={selectedCompartment.id}
-                        categories={categories}
+                        orderedCategories={orderedCategories}
                         bgColor={bgColor}
                         textColor={textColor}
                         updateItem={updateItem}
@@ -257,31 +253,16 @@ export function EditView() {
           </div>
         )}
 
-        {isMassEdit && activeDrawer && (
-          <MassEditPanel
-            key={Array.from(selectedCompartmentIds).sort().join(',')}
-            selectedCount={selectedCompartmentIds.size}
-            selectedCompartmentIds={selectedCompartmentIds}
-            compartments={activeDrawer.compartments}
-            setDividerCountForSelected={setDividerCountForSelected}
-            clearAllContents={() => applyToSelected({ label: '' })}
-            clearSelection={clearSelection}
-            mergeSelectedCompartments={mergeSelectedCompartments}
-          />
-        )}
 
         {isDrawerEdit && selectedDrawer && (
           <DrawerEditForm
             key={selectedDrawer.id}
             drawer={selectedDrawer}
-            drawerOrder={drawerOrder}
             renameDrawer={renameDrawer}
             resizeDrawer={resizeDrawer}
+            setCompartmentSize={setCompartmentSize}
+            duplicateDrawer={duplicateDrawer}
             onDelete={handleDrawerDelete}
-            onDone={() => {
-              clearDrawerSelection();
-              exitEditMode();
-            }}
           />
         )}
 
@@ -298,7 +279,7 @@ export function EditView() {
 interface SubCompartmentEditorProps {
   subCompartment: SubCompartment;
   compartmentId: string;
-  categories: Record<string, Category>;
+  orderedCategories: Category[];
   bgColor: string;
   textColor: string;
   updateItem: (compartmentId: string, subId: string, item: StoredItem | null) => void;
@@ -309,7 +290,7 @@ interface SubCompartmentEditorProps {
 function SubCompartmentEditor({
   subCompartment,
   compartmentId,
-  categories,
+  orderedCategories,
   bgColor,
   textColor,
   updateItem,
@@ -366,18 +347,21 @@ function SubCompartmentEditor({
           className={`inline-color ${categoryId === '' ? 'active' : ''}`}
           style={{ backgroundColor: '#e5e7eb' }}
           onClick={() => handleCategorySelect('')}
+          title="No category"
         />
-        {Object.values(categories).map((c) => (
+        {orderedCategories.map((c) => (
           <button
             key={c.id}
             className={`inline-color ${categoryId === c.id ? 'active' : ''}`}
             style={{ backgroundColor: getCategoryColor(c) }}
             onClick={() => handleCategorySelect(c.id)}
+            title={c.name}
           />
         ))}
         <button
           className="inline-color inline-color-add"
           onClick={() => setCategoryModalOpen(true)}
+          title="Manage categories"
         >
           +
         </button>
@@ -403,24 +387,26 @@ function SubCompartmentEditor({
 
 interface DrawerEditFormProps {
   drawer: Drawer;
-  drawerOrder: string[];
   renameDrawer: (id: string, name: string) => void;
   resizeDrawer: (id: string, rows: number, cols: number) => void;
+  setCompartmentSize: (id: string, width: number, height: number) => void;
+  duplicateDrawer: (id: string) => void;
   onDelete: () => void;
-  onDone: () => void;
 }
 
 function DrawerEditForm({
   drawer,
-  drawerOrder,
   renameDrawer,
   resizeDrawer,
+  setCompartmentSize,
+  duplicateDrawer,
   onDelete,
-  onDone,
 }: DrawerEditFormProps) {
   const [name, setName] = useState(drawer.name);
-  const [rows, setRows] = useState(drawer.rows);
-  const [cols, setCols] = useState(drawer.cols);
+  const [rows, setRows] = useState<number | ''>(drawer.rows);
+  const [cols, setCols] = useState<number | ''>(drawer.cols);
+  const [compWidth, setCompWidth] = useState<number | ''>(drawer.compartmentWidth ?? DEFAULT_COMPARTMENT_WIDTH);
+  const [compHeight, setCompHeight] = useState<number | ''>(drawer.compartmentHeight ?? DEFAULT_COMPARTMENT_HEIGHT);
 
   const handleNameBlur = useCallback(() => {
     if (name.trim()) {
@@ -428,9 +414,41 @@ function DrawerEditForm({
     }
   }, [drawer.id, name, renameDrawer]);
 
-  const handleResize = useCallback(() => {
-    resizeDrawer(drawer.id, rows, cols);
-  }, [drawer.id, rows, cols, resizeDrawer]);
+  const handleRowsChange = useCallback((value: number | '') => {
+    setRows(value);
+    if (value !== '') {
+      const finalRows = Math.max(1, Math.min(20, value));
+      resizeDrawer(drawer.id, finalRows, cols === '' ? drawer.cols : cols);
+    }
+  }, [drawer.id, cols, drawer.cols, resizeDrawer]);
+
+  const handleColsChange = useCallback((value: number | '') => {
+    setCols(value);
+    if (value !== '') {
+      const finalCols = Math.max(1, Math.min(20, value));
+      resizeDrawer(drawer.id, rows === '' ? drawer.rows : rows, finalCols);
+    }
+  }, [drawer.id, rows, drawer.rows, resizeDrawer]);
+
+  const handleCompWidthChange = useCallback((value: number | '') => {
+    setCompWidth(value);
+    if (value !== '') {
+      const finalWidth = Math.max(1, Math.min(10, value));
+      setCompartmentSize(drawer.id, finalWidth, compHeight === '' ? DEFAULT_COMPARTMENT_HEIGHT : compHeight);
+    }
+  }, [drawer.id, compHeight, setCompartmentSize]);
+
+  const handleCompHeightChange = useCallback((value: number | '') => {
+    setCompHeight(value);
+    if (value !== '') {
+      const finalHeight = Math.max(1, Math.min(10, value));
+      setCompartmentSize(drawer.id, compWidth === '' ? DEFAULT_COMPARTMENT_WIDTH : compWidth, finalHeight);
+    }
+  }, [drawer.id, compWidth, setCompartmentSize]);
+
+  const handleDuplicate = useCallback(() => {
+    duplicateDrawer(drawer.id);
+  }, [drawer.id, duplicateDrawer]);
 
   return (
     <>
@@ -448,7 +466,7 @@ function DrawerEditForm({
 
       <hr className="divider" />
 
-      <h3 className="section-title">Dimensions</h3>
+      <h3 className="section-title">Grid Size</h3>
 
       <div className="form-row">
         <div className="form-group">
@@ -459,7 +477,7 @@ function DrawerEditForm({
             min="1"
             max="20"
             value={cols}
-            onChange={(e) => setCols(parseInt(e.target.value) || 1)}
+            onChange={(e) => handleColsChange(e.target.value === '' ? '' : parseInt(e.target.value))}
           />
         </div>
         <div className="form-group">
@@ -470,150 +488,54 @@ function DrawerEditForm({
             min="1"
             max="20"
             value={rows}
-            onChange={(e) => setRows(parseInt(e.target.value) || 1)}
+            onChange={(e) => handleRowsChange(e.target.value === '' ? '' : parseInt(e.target.value))}
           />
         </div>
       </div>
 
-      <button className="btn-primary full-width" onClick={handleResize}>
-        Apply Size
-      </button>
-
       <hr className="divider" />
 
-      <button
-        className="btn-danger full-width"
-        onClick={onDelete}
-        disabled={drawerOrder.length <= 1}
-      >
-        Delete Drawer
-      </button>
+      <h3 className="section-title">Compartment Size</h3>
 
-      <button
-        className="btn-secondary full-width"
-        onClick={onDone}
-      >
-        Done
-      </button>
-    </>
-  );
-}
-
-interface MassEditPanelProps {
-  selectedCount: number;
-  selectedCompartmentIds: Set<string>;
-  compartments: Record<string, Compartment>;
-  setDividerCountForSelected: (count: number) => void;
-  clearAllContents: () => void;
-  clearSelection: () => void;
-  mergeSelectedCompartments: () => Promise<void>;
-}
-
-function MassEditPanel({
-  selectedCount,
-  selectedCompartmentIds,
-  compartments,
-  setDividerCountForSelected,
-  clearAllContents,
-  clearSelection,
-  mergeSelectedCompartments,
-}: MassEditPanelProps) {
-  const mergeValidation = useMemo(
-    () => canMergeCompartments(compartments, selectedCompartmentIds),
-    [compartments, selectedCompartmentIds]
-  );
-  const initialDividers = useMemo(() => {
-    const counts: Record<number, number> = {};
-    selectedCompartmentIds.forEach((id) => {
-      const comp = compartments[id];
-      if (comp) {
-        const divCount = comp.subCompartments.length - 1;
-        counts[divCount] = (counts[divCount] || 0) + 1;
-      }
-    });
-    let maxCount = 0;
-    let mostCommon = 0;
-    Object.entries(counts).forEach(([divs, count]) => {
-      if (count > maxCount) {
-        maxCount = count;
-        mostCommon = parseInt(divs);
-      }
-    });
-    return mostCommon;
-  }, [selectedCompartmentIds, compartments]);
-
-  const [currentDividers, setCurrentDividers] = useState(initialDividers);
-
-  const handleAddDivider = () => {
-    const newCount = Math.min(5, currentDividers + 1);
-    setCurrentDividers(newCount);
-    setDividerCountForSelected(newCount);
-  };
-
-  const handleRemoveDivider = () => {
-    const newCount = Math.max(0, currentDividers - 1);
-    setCurrentDividers(newCount);
-    setDividerCountForSelected(newCount);
-  };
-
-  return (
-    <>
-      <p className="mass-edit-info">
-        {selectedCount} compartments selected
-      </p>
-
-      <div className="form-group">
-        <label>Sections</label>
-        <div className="divider-controls" style={{ justifyContent: 'flex-start', marginTop: 0 }}>
-          <button
-            className="divider-btn"
-            onClick={handleRemoveDivider}
-            disabled={currentDividers <= 0}
-            title="Remove divider"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 12h14" />
-            </svg>
-          </button>
-          <span className="divider-count">
-            {currentDividers + 1} section{currentDividers !== 0 ? 's' : ''}
-          </span>
-          <button
-            className="divider-btn"
-            onClick={handleAddDivider}
-            disabled={currentDividers >= 5}
-            title="Add divider"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
+      <div className="form-row">
+        <div className="form-group">
+          <label htmlFor="comp-width">Width</label>
+          <input
+            id="comp-width"
+            type="number"
+            min="1"
+            max="10"
+            value={compWidth}
+            onChange={(e) => handleCompWidthChange(e.target.value === '' ? '' : parseInt(e.target.value))}
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="comp-height">Height</label>
+          <input
+            id="comp-height"
+            type="number"
+            min="1"
+            max="10"
+            value={compHeight}
+            onChange={(e) => handleCompHeightChange(e.target.value === '' ? '' : parseInt(e.target.value))}
+          />
         </div>
       </div>
 
       <hr className="divider" />
 
+      <button className="btn-secondary full-width" onClick={handleDuplicate}>
+        Duplicate Drawer
+      </button>
+
       <button
-        className="btn-primary full-width"
-        onClick={mergeSelectedCompartments}
-        disabled={!mergeValidation.valid}
-        title={mergeValidation.error || 'Merge selected compartments'}
+        className="btn-danger full-width"
+        onClick={onDelete}
+        style={{ marginTop: '0.5rem' }}
       >
-        Merge into 1 Compartment
-      </button>
-      {!mergeValidation.valid && mergeValidation.error && (
-        <p className="merge-error">{mergeValidation.error}</p>
-      )}
-
-      <hr className="divider" />
-
-      <button className="btn-danger full-width" onClick={clearAllContents}>
-        Clear All Contents
-      </button>
-
-      <button className="btn-secondary full-width" style={{ marginTop: '0.5rem' }} onClick={clearSelection}>
-        Deselect All
+        Delete Drawer
       </button>
     </>
   );
 }
+

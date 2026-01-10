@@ -1,27 +1,17 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { roomWebSocket, type SyncMessage } from '../api/websocket';
 import { useAuthStore } from '../store/authStore';
 import { useDrawerStore } from '../store/drawerStore';
 import { api } from '../api/client';
 import type { Drawer, Compartment, SubCompartment, Category } from '../types/drawer';
 
-interface ConnectedUser {
-  userId: string;
-  username: string;
-}
-
-// Minimum time window must be hidden before triggering a re-sync (5 seconds)
 const RESYNC_THRESHOLD_MS = 5000;
 
-export function useRoomSync() {
+export function useRoomSync(): void {
   const { mode, currentRoomId, isAuthenticated } = useAuthStore();
   const { loadFromApi } = useDrawerStore();
-  const [isConnected, setIsConnected] = useState(false);
-  const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
-  const isRemoteUpdateRef = useRef(false);
   const hiddenAtRef = useRef<number | null>(null);
 
-  // Connect/disconnect based on auth state
   useEffect(() => {
     if (mode === 'online' && isAuthenticated && currentRoomId) {
       roomWebSocket.connect(currentRoomId);
@@ -34,56 +24,25 @@ export function useRoomSync() {
     };
   }, [mode, isAuthenticated, currentRoomId]);
 
-  // Handle connection state changes
   useEffect(() => {
-    const unsubscribe = roomWebSocket.onConnectionChange(setIsConnected);
+    const unsubscribe = roomWebSocket.onMessage(handleRemoteMessage);
     return unsubscribe;
   }, []);
 
-  // Handle connected users changes
-  useEffect(() => {
-    const unsubscribe = roomWebSocket.onUsersChange(setConnectedUsers);
-    return unsubscribe;
-  }, []);
-
-  // Handle incoming sync messages
-  useEffect(() => {
-    const unsubscribe = roomWebSocket.onMessage((message) => {
-      // Mark that we're processing a remote update
-      isRemoteUpdateRef.current = true;
-
-      try {
-        handleRemoteMessage(message);
-      } finally {
-        isRemoteUpdateRef.current = false;
-      }
-    });
-
-    return unsubscribe;
-  }, []);
-
-  // Re-sync when window regains focus after being hidden
   useEffect(() => {
     if (mode !== 'online' || !isAuthenticated || !currentRoomId) return;
 
     const handleVisibilityChange = async () => {
       if (document.hidden) {
-        // Window is now hidden, record the time
         hiddenAtRef.current = Date.now();
       } else {
-        // Window is now visible
         const hiddenAt = hiddenAtRef.current;
         hiddenAtRef.current = null;
 
-        // If we were hidden for more than the threshold, re-sync
         if (hiddenAt && Date.now() - hiddenAt > RESYNC_THRESHOLD_MS) {
-          console.log('Window refocused after being hidden, re-syncing room data...');
           try {
             const room = await api.getRoom(currentRoomId);
-            // Mark as remote update to avoid re-broadcasting
-            isRemoteUpdateRef.current = true;
             loadFromApi(room);
-            isRemoteUpdateRef.current = false;
           } catch (error) {
             console.error('Failed to re-sync room data:', error);
           }
@@ -94,20 +53,9 @@ export function useRoomSync() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [mode, isAuthenticated, currentRoomId, loadFromApi]);
-
-  // Check if currently processing a remote update (to avoid re-broadcasting)
-  const isRemoteUpdate = useCallback(() => isRemoteUpdateRef.current, []);
-
-  return {
-    isConnected,
-    connectedUsers,
-    send: roomWebSocket.send.bind(roomWebSocket),
-    isRemoteUpdate,
-  };
 }
 
-// Handle incoming remote messages - server is authoritative, always apply updates
-function handleRemoteMessage(message: SyncMessage) {
+function handleRemoteMessage(message: SyncMessage): void {
   switch (message.type) {
     case 'drawer_created':
       applyRemoteDrawerCreate(message.drawer);
@@ -160,7 +108,6 @@ function handleRemoteMessage(message: SyncMessage) {
     case 'user_joined':
     case 'user_left':
     case 'cursor_move':
-      // Handled by WebSocket client internally or ignored
       break;
 
     case 'member_removed':
@@ -168,46 +115,32 @@ function handleRemoteMessage(message: SyncMessage) {
       break;
 
     case 'error':
-      console.error('Sync error:', message.message);
       break;
   }
 }
 
-// Handle being removed from a room
-function handleMemberRemoved(userId: string, _roomId: string) {
+function handleMemberRemoved(userId: string, _roomId: string): void {
   const authState = useAuthStore.getState();
-
-  // Only handle if this is about the current user
   if (authState.user?.id !== userId) return;
 
-  // Clear the current room data
   useDrawerStore.getState().clearRoomData();
-
-  // Disconnect from this room (will be done by server closing connection, but be explicit)
   roomWebSocket.disconnect();
 
-  // Reload rooms to get updated list (this room should be gone)
   authState.loadRooms().then(() => {
     const { rooms, user } = useAuthStore.getState();
-
-    // Find user's own default room to switch to
     const defaultRoom = rooms.find(r => r.isDefault && r.ownerId === user?.id) || rooms[0];
 
     if (defaultRoom) {
       useAuthStore.setState({ currentRoomId: defaultRoom.id });
       localStorage.setItem('organizer-current-room', defaultRoom.id);
-
-      // Reconnect to the new room
       roomWebSocket.connect(defaultRoom.id);
     } else {
-      // No rooms available, clear current room
       useAuthStore.setState({ currentRoomId: null });
       localStorage.removeItem('organizer-current-room');
     }
   });
 }
 
-// Remote update handlers
 function applyRemoteDrawerCreate(
   syncDrawer: SyncMessage & { type: 'drawer_created' } extends { drawer: infer D } ? D : never
 ) {
@@ -255,11 +188,70 @@ function applyRemoteDrawerCreate(
 
 function applyRemoteDrawerUpdate(
   drawerId: string,
-  changes: { name?: string; gridX?: number; gridY?: number }
+  changes: {
+    name?: string;
+    rows?: number;
+    cols?: number;
+    gridX?: number;
+    gridY?: number;
+    compartmentWidth?: number;
+    compartmentHeight?: number;
+  }
 ) {
   useDrawerStore.setState((state) => {
     const drawer = state.drawers[drawerId];
     if (!drawer) return state;
+
+    const newRows = changes.rows ?? drawer.rows;
+    const newCols = changes.cols ?? drawer.cols;
+
+    let compartments = drawer.compartments;
+    if (newRows !== drawer.rows || newCols !== drawer.cols) {
+      compartments = {};
+      const occupiedCells = new Set<string>();
+
+      Object.values(drawer.compartments).forEach((comp) => {
+        if (comp.row >= newRows || comp.col >= newCols) {
+          return;
+        }
+
+        const clampedRowSpan = Math.min(comp.rowSpan ?? 1, newRows - comp.row);
+        const clampedColSpan = Math.min(comp.colSpan ?? 1, newCols - comp.col);
+
+        compartments[comp.id] = {
+          ...comp,
+          rowSpan: clampedRowSpan,
+          colSpan: clampedColSpan,
+        };
+
+        for (let r = comp.row; r < comp.row + clampedRowSpan; r++) {
+          for (let c = comp.col; c < comp.col + clampedColSpan; c++) {
+            occupiedCells.add(`${r}-${c}`);
+          }
+        }
+      });
+
+      for (let row = 0; row < newRows; row++) {
+        for (let col = 0; col < newCols; col++) {
+          const key = `${row}-${col}`;
+          if (!occupiedCells.has(key)) {
+            const newComp: Compartment = {
+              id: crypto.randomUUID(),
+              row,
+              col,
+              rowSpan: 1,
+              colSpan: 1,
+              dividerOrientation: 'horizontal',
+              subCompartments: [
+                { id: crypto.randomUUID(), relativeSize: 0.5, item: null },
+                { id: crypto.randomUUID(), relativeSize: 0.5, item: null },
+              ],
+            };
+            compartments[newComp.id] = newComp;
+          }
+        }
+      }
+    }
 
     return {
       drawers: {
@@ -267,8 +259,13 @@ function applyRemoteDrawerUpdate(
         [drawerId]: {
           ...drawer,
           name: changes.name ?? drawer.name,
+          rows: newRows,
+          cols: newCols,
           gridX: changes.gridX ?? drawer.gridX,
           gridY: changes.gridY ?? drawer.gridY,
+          compartmentWidth: changes.compartmentWidth ?? drawer.compartmentWidth,
+          compartmentHeight: changes.compartmentHeight ?? drawer.compartmentHeight,
+          compartments,
         },
       },
     };
@@ -379,7 +376,6 @@ function applyRemoteCompartmentsMerged(
     const drawer = state.drawers[drawerId];
     if (!drawer) return state;
 
-    // Remove deleted compartments and add the new merged one
     const updatedCompartments = { ...drawer.compartments };
     for (const id of deletedIds) {
       delete updatedCompartments[id];
@@ -407,7 +403,6 @@ function applyRemoteCompartmentsMerged(
       subCompartments,
     };
 
-    // Clear selection if any selected compartment was deleted
     let newSelectedCompartmentIds = state.selectedCompartmentIds;
     if (deletedIds.some(id => state.selectedCompartmentIds.has(id))) {
       newSelectedCompartmentIds = new Set<string>();
@@ -443,7 +438,6 @@ function applyRemoteCompartmentSplit(
     const drawer = state.drawers[drawerId];
     if (!drawer) return state;
 
-    // Remove the split compartment and add the new ones
     const updatedCompartments = { ...drawer.compartments };
     delete updatedCompartments[deletedId];
 
@@ -471,7 +465,6 @@ function applyRemoteCompartmentSplit(
       };
     }
 
-    // Clear selection if the split compartment was selected
     let newSelectedCompartmentIds = state.selectedCompartmentIds;
     if (state.selectedCompartmentIds.has(deletedId)) {
       newSelectedCompartmentIds = new Set<string>();

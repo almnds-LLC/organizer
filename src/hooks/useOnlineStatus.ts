@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useOfflineStore } from '../store/offlineStore';
 
-export function useOnlineStatus() {
+export function useOnlineStatus(): void {
   const setOnline = useOfflineStore((state) => state.setOnline);
 
   useEffect(() => {

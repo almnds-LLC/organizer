@@ -11,9 +11,9 @@ import styles from './AddDrawerModal.module.css';
 
 interface FormState {
   name: string;
-  rows: number;
-  cols: number;
-  dividerCount: number;
+  rows: number | '';
+  cols: number | '';
+  dividerCount: number | '';
 }
 
 type FormAction =
@@ -53,9 +53,9 @@ export function AddDrawerModal() {
 
     addDrawer({
       name: form.name.trim(),
-      rows: form.rows,
-      cols: form.cols,
-      defaultDividerCount: form.dividerCount,
+      rows: form.rows === '' ? DEFAULT_DRAWER_ROWS : form.rows,
+      cols: form.cols === '' ? DEFAULT_DRAWER_COLS : form.cols,
+      defaultDividerCount: form.dividerCount === '' ? DEFAULT_DIVIDER_COUNT : form.dividerCount,
     });
 
     dispatch({ type: 'RESET' });
@@ -91,7 +91,7 @@ export function AddDrawerModal() {
               min="1"
               max="20"
               value={form.cols}
-              onChange={(e) => setField('cols', parseInt(e.target.value) || 1)}
+              onChange={(e) => setField('cols', e.target.value === '' ? '' : parseInt(e.target.value))}
             />
           </div>
 
@@ -103,30 +103,27 @@ export function AddDrawerModal() {
               min="1"
               max="20"
               value={form.rows}
-              onChange={(e) => setField('rows', parseInt(e.target.value) || 1)}
+              onChange={(e) => setField('rows', e.target.value === '' ? '' : parseInt(e.target.value))}
             />
           </div>
         </div>
 
         <div className={styles.formGroup}>
-          <label htmlFor="divider-count">Default dividers per compartment</label>
+          <label htmlFor="divider-count">Default sections per compartment</label>
           <input
             id="divider-count"
             type="number"
-            min="0"
-            max="5"
-            value={form.dividerCount}
-            onChange={(e) => setField('dividerCount', parseInt(e.target.value) || 0)}
+            min="1"
+            max="6"
+            value={form.dividerCount === '' ? '' : form.dividerCount + 1}
+            onChange={(e) => setField('dividerCount', e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) - 1))}
           />
-          <span className={styles.formHint}>
-            Creates {form.dividerCount + 1} sub-compartment{form.dividerCount !== 0 ? 's' : ''} per cell
-          </span>
         </div>
 
         <div className={styles.formPreview}>
           <span className={styles.previewLabel}>Preview:</span>
           <span className={styles.previewValue}>
-            {form.cols} x {form.rows} grid = {form.cols * form.rows} compartments
+            {form.cols || DEFAULT_DRAWER_COLS} x {form.rows || DEFAULT_DRAWER_ROWS} grid = {(form.cols || DEFAULT_DRAWER_COLS) * (form.rows || DEFAULT_DRAWER_ROWS)} compartments
           </span>
         </div>
 

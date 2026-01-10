@@ -30,7 +30,6 @@ export function AuthDropdown() {
     setTurnstileKey((k) => k + 1);
   }, []);
 
-  // Track Turnstile height with ResizeObserver for negative margin trick
   useEffect(() => {
     const el = turnstileRef.current;
     if (!el) return;
@@ -46,7 +45,6 @@ export function AuthDropdown() {
     return () => observer.disconnect();
   }, [isOpen]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     if (!isOpen || isMobile) return;
 
@@ -157,7 +155,7 @@ export function AuthDropdown() {
             onVerify={(token: string) => setTurnstileToken(token)}
             onExpire={() => setTurnstileToken(null)}
             onError={() => setTurnstileToken(null)}
-            // appearance="interaction-only"
+            appearance="interaction-only"
             size="flexible"
             theme="light"
           />

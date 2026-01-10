@@ -1,23 +1,42 @@
-// Shared ref for synchronously controlling camera pan state
-// This bypasses React's async state updates for immediate response
-
 import type { OrbitControls as OrbitControlsType } from 'three-stdlib';
 
 export const cameraControlsState = {
-  // When true, camera panning should be disabled
   blockPan: false,
-  // Direct reference to controls for immediate manipulation
   controlsRef: null as OrbitControlsType | null,
+  domElement: null as HTMLElement | null,
 };
 
-export function setBlockCameraPan(block: boolean) {
+export function setBlockCameraPan(block: boolean): void {
   cameraControlsState.blockPan = block;
-  // Immediately update controls if we have a reference
   if (cameraControlsState.controlsRef) {
     cameraControlsState.controlsRef.enabled = !block;
   }
 }
 
-export function setCameraControlsRef(controls: OrbitControlsType | null) {
+export function forceStopPan(): void {
+  cameraControlsState.blockPan = true;
+
+  const controls = cameraControlsState.controlsRef;
+  const domElement = cameraControlsState.domElement;
+
+  if (controls) {
+    controls.enabled = false;
+  }
+
+  if (domElement) {
+    const cancelEvent = new PointerEvent('pointercancel', {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+      pointerType: 'touch',
+    });
+    domElement.dispatchEvent(cancelEvent);
+  }
+}
+
+export function setCameraControlsRef(controls: OrbitControlsType | null, domElement?: HTMLElement | null): void {
   cameraControlsState.controlsRef = controls;
+  if (domElement !== undefined) {
+    cameraControlsState.domElement = domElement;
+  }
 }

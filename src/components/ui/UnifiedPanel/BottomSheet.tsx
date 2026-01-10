@@ -66,7 +66,6 @@ export function BottomSheet({ children }: BottomSheetProps) {
 
   useEffect(() => {
     if (sheetRef.current) {
-      // Ensure transition is set for programmatic changes
       sheetRef.current.style.transition = 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)';
       sheetRef.current.style.transform = `translateY(${getTranslateY(panelSnapPoint)}px)`;
     }
@@ -82,14 +81,12 @@ export function BottomSheet({ children }: BottomSheetProps) {
     return () => window.removeEventListener('resize', handleResize);
   }, [panelSnapPoint, getTranslateY]);
 
-  // Check if touch started on an interactive element
   const isInteractiveElement = useCallback((target: EventTarget | null): boolean => {
     if (!target || !(target instanceof HTMLElement)) return false;
     const interactive = target.closest('button, input, select, textarea, a, [role="button"]');
     return interactive !== null;
   }, []);
 
-  // Check if content can scroll
   const canContentScroll = useCallback((direction: number): boolean => {
     if (!contentRef.current || panelSnapPoint === 'collapsed') return false;
     const content = contentRef.current;
@@ -106,17 +103,13 @@ export function BottomSheet({ children }: BottomSheetProps) {
     ({ event, first, movement: [, my], velocity: [, vy], direction: [, dy], last, memo, cancel }) => {
       if (!sheetRef.current) return;
 
-      // On first touch, check if we should handle this drag
       if (first) {
-        // Don't drag if touching interactive element
         if (isInteractiveElement(event?.target ?? null)) {
           cancel();
           return;
         }
         isDraggingRef.current = true;
 
-        // Check if sheet is visually at collapsed position (not just target state)
-        // This prevents mode swap during close animation
         if (sheetRef.current) {
           const transform = sheetRef.current.style.transform;
           const match = transform.match(/translateY\((.+)px\)/);
@@ -124,7 +117,6 @@ export function BottomSheet({ children }: BottomSheetProps) {
           const collapsedY = getTranslateY('collapsed');
           const isVisuallyCollapsed = Math.abs(currentY - collapsedY) < 20;
 
-          // If sheet is visually collapsed and nothing selected, swap to inventory
           const hasSelection = selectedCompartmentIds.size > 0 || selectedDrawerIds.size > 0;
           if (isVisuallyCollapsed && !hasSelection) {
             setPanelMode('inventory');
@@ -132,13 +124,11 @@ export function BottomSheet({ children }: BottomSheetProps) {
         }
       }
 
-      // Check if content should scroll instead
       if (canContentScroll(dy) && !isDraggingRef.current) {
         cancel();
         return;
       }
 
-      // Once we start dragging the sheet, prevent content scroll
       if (contentRef.current && isDraggingRef.current) {
         contentRef.current.style.overflow = 'hidden';
       }
@@ -173,24 +163,20 @@ export function BottomSheet({ children }: BottomSheetProps) {
     }
   );
 
-  // Prevent default touch behavior on the sheet to stop page scrolling
   useEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
 
     const preventDefaultTouch = (e: TouchEvent) => {
-      // Allow touches on content area when expanded, but prevent on handle/background
       const target = e.target as HTMLElement;
       const isInContent = contentRef.current?.contains(target);
       const isInteractive = isInteractiveElement(target);
 
-      // When collapsed, prevent all default touch behavior
       if (panelSnapPoint === 'collapsed') {
         e.preventDefault();
         return;
       }
 
-      // When expanded, only allow default on content (for scrolling) and interactive elements
       if (!isInContent && !isInteractive) {
         e.preventDefault();
       }
@@ -222,7 +208,6 @@ export function BottomSheet({ children }: BottomSheetProps) {
         willChange: 'transform',
       }}
     >
-      {/* Drag handle */}
       <div
         style={{
           padding: '12px 0 8px 0',
@@ -241,7 +226,6 @@ export function BottomSheet({ children }: BottomSheetProps) {
         />
       </div>
 
-      {/* Content */}
       <div
         ref={contentRef}
         style={{

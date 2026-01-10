@@ -4,11 +4,12 @@ import { useAuthStore } from '../store/authStore';
 import { roomWebSocket } from '../api/websocket';
 import { useCursorStore } from '../store/cursorStore';
 
-export function useWebRTC() {
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+export function useWebRTC(): void {
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const clearAllCursors = useCursorStore((s) => s.clearAllCursors);
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;
@@ -16,9 +17,7 @@ export function useWebRTC() {
     const handleConnected = () => {
       webRTCManager.initialize(user.id, user.username, isMobile);
 
-      // Connect to any users already in the room
-      // This handles the race condition where user_joined events arrive
-      // before this hook subscribes to messages
+      // Connect to users already in the room (handles race condition with user_joined events)
       const existingUsers = roomWebSocket.getConnectedUsers();
       for (const existingUser of existingUsers) {
         if (existingUser.userId !== user.id) {
@@ -46,5 +45,5 @@ export function useWebRTC() {
       webRTCManager.cleanup();
       clearAllCursors();
     };
-  }, [isAuthenticated, user, isMobile, clearAllCursors]);
+  }, [isAuthenticated, user, clearAllCursors]);
 }
