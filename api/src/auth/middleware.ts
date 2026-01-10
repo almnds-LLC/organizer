@@ -1,4 +1,5 @@
 import type { Context, Next } from 'hono';
+import { getCookie } from 'hono/cookie';
 import { verifyAccessToken } from './tokens';
 
 export interface AuthContext {
@@ -14,12 +15,11 @@ declare module 'hono' {
 
 export function authMiddleware(jwtSecret: string) {
   return async (c: Context, next: Next) => {
-    const authHeader = c.req.header('Authorization');
-    let token: string | undefined;
-
-    if (authHeader?.startsWith('Bearer ')) {
-      token = authHeader.slice(7);
-    }
+    // Try cookie first, fall back to Authorization header
+    const token = getCookie(c, 'access_token') ||
+      (c.req.header('Authorization')?.startsWith('Bearer ')
+        ? c.req.header('Authorization')?.slice(7)
+        : undefined);
 
     if (!token) {
       return c.json({ error: 'Unauthorized' }, 401);

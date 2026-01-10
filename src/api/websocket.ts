@@ -1,29 +1,9 @@
-import { api } from './client';
-
 const API_BASE = (import.meta.env.VITE_API_URL ?? '') + '/api';
 
-// Decode JWT payload to check expiration (JWT is just base64url encoded JSON)
-function isTokenExpired(token: string, bufferSeconds = 60): boolean {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return true;
-
-    // Decode base64url payload
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-    if (!payload.exp) return true;
-
-    // Check if expired (with buffer for clock skew)
-    const now = Math.floor(Date.now() / 1000);
-    return payload.exp < now + bufferSeconds;
-  } catch {
-    return true;
-  }
-}
-
-// Convert HTTP URL to WebSocket URL
-function getWsUrl(roomId: string, token: string): string {
+// Convert HTTP URL to WebSocket URL (cookies are sent automatically)
+function getWsUrl(roomId: string): string {
   const base = API_BASE.replace(/^http/, 'ws') || `ws://${window.location.host}/api`;
-  return `${base}/rooms/${roomId}/ws?token=${encodeURIComponent(token)}`;
+  return `${base}/rooms/${roomId}/ws`;
 }
 
 export type SyncMessage =
@@ -106,8 +86,12 @@ interface SyncCategory {
 
 interface SyncDrawerUpdate {
   name?: string;
+  rows?: number;
+  cols?: number;
   gridX?: number;
   gridY?: number;
+  compartmentWidth?: number;
+  compartmentHeight?: number;
 }
 
 // Connected users
@@ -125,7 +109,6 @@ class RoomWebSocket {
   private roomId: string | null = null;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
   private messageHandlers: Set<MessageHandler> = new Set();
   private connectionHandlers: Set<ConnectionHandler> = new Set();
   private usersHandlers: Set<UsersHandler> = new Set();
@@ -134,28 +117,11 @@ class RoomWebSocket {
   private authFailed = false;
 
   connect(roomId: string): void {
-    // Start async connection process
-    this.connectAsync(roomId).catch((error) => {
-      console.error('WebSocket connection failed:', error);
-    });
+    this.connectAsync(roomId).catch(() => {});
   }
 
   private async connectAsync(roomId: string): Promise<void> {
-    // Get current token and check if it needs refresh
-    let token = api.getToken();
-
-    if (!token || isTokenExpired(token)) {
-      // Token missing or expired, try to refresh
-      token = await api.refreshToken();
-      if (!token) {
-        console.warn('No auth token, cannot connect to WebSocket');
-        return;
-      }
-    }
-
-    // Don't try to connect if auth previously failed for this room
     if (this.authFailed && this.roomId === roomId) {
-      console.warn('WebSocket auth previously failed, not reconnecting');
       return;
     }
 
@@ -175,12 +141,10 @@ class RoomWebSocket {
     this.roomId = roomId;
     this.connectedUsers.clear();
 
-    const wsUrl = getWsUrl(roomId, token);
-    console.log('WebSocket connecting to:', roomId);
+    const wsUrl = getWsUrl(roomId);
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      console.log('WebSocket connected to room:', roomId);
       this.reconnectAttempts = 0;
       this.hasConnectedOnce = true;
       this.authFailed = false;
@@ -197,26 +161,19 @@ class RoomWebSocket {
     };
 
     this.ws.onclose = (event) => {
-      console.log('WebSocket closed:', event.code, event.reason);
       this.notifyConnectionHandlers(false);
 
-      // If we never connected successfully and got an abnormal closure,
-      // it's likely an auth error (401 during handshake)
       if (!this.hasConnectedOnce && event.code === 1006) {
-        console.log('WebSocket failed to connect (likely auth error), not reconnecting');
         this.authFailed = true;
         return;
       }
 
-      // Only reconnect if we previously connected successfully and this was unexpected
-      if (this.hasConnectedOnce && !event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts && this.roomId) {
+      if (this.hasConnectedOnce && !event.wasClean && this.roomId) {
         this.scheduleReconnect();
       }
     };
 
-    this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
+    this.ws.onerror = () => {};
   }
 
   private closeConnection(): void {
@@ -244,9 +201,8 @@ class RoomWebSocket {
   }
 
   private scheduleReconnect(): void {
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 45000);
     this.reconnectAttempts++;
-    console.log(`Scheduling reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
     this.reconnectTimeout = setTimeout(() => {
       if (this.roomId) {
@@ -258,8 +214,6 @@ class RoomWebSocket {
   send(message: SyncMessage): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
-    } else {
-      console.warn('WebSocket not connected, cannot send message');
     }
   }
 
@@ -276,32 +230,27 @@ class RoomWebSocket {
       this.notifyUsersHandlers();
     }
 
-    // Notify all handlers
     this.messageHandlers.forEach(handler => {
       try {
         handler(message);
       } catch (error) {
-        console.error('Error in message handler:', error);
+        console.error('WebSocket message handler error:', error);
       }
     });
   }
 
-  // Subscribe to messages
   onMessage(handler: MessageHandler): () => void {
     this.messageHandlers.add(handler);
     return () => this.messageHandlers.delete(handler);
   }
 
-  // Subscribe to connection state changes
   onConnectionChange(handler: ConnectionHandler): () => void {
     this.connectionHandlers.add(handler);
     return () => this.connectionHandlers.delete(handler);
   }
 
-  // Subscribe to connected users changes
   onUsersChange(handler: UsersHandler): () => void {
     this.usersHandlers.add(handler);
-    // Immediately call with current users
     handler(Array.from(this.connectedUsers.values()));
     return () => this.usersHandlers.delete(handler);
   }
@@ -311,7 +260,7 @@ class RoomWebSocket {
       try {
         handler(connected);
       } catch (error) {
-        console.error('Error in connection handler:', error);
+        console.error('WebSocket connection handler error:', error);
       }
     });
   }
@@ -322,7 +271,7 @@ class RoomWebSocket {
       try {
         handler(users);
       } catch (error) {
-        console.error('Error in users handler:', error);
+        console.error('WebSocket users handler error:', error);
       }
     });
   }

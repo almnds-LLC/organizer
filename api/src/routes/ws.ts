@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getCookie } from 'hono/cookie';
 import { createStorageProvider, createRealtimeProvider, type CloudflareBindings } from '../providers/cloudflare';
 import { verifyAccessToken } from '../auth/tokens';
 import { authMiddleware, type AuthContext } from '../auth/middleware';
@@ -9,8 +10,7 @@ export const wsRoutes = new Hono<{ Bindings: CloudflareBindings; Variables: Vari
 
 wsRoutes.get('/rooms/:roomId/ws', async (c) => {
   const { roomId } = c.req.param();
-
-  const token = c.req.query('token');
+  const token = getCookie(c, 'access_token') || c.req.query('token');
   if (!token) {
     return c.json({ error: 'Missing token' }, 401);
   }

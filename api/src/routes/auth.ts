@@ -44,6 +44,16 @@ async function verifyTurnstile(token: string, secret: string, ip?: string): Prom
 
 export const authRoutes = new Hono<{ Bindings: CloudflareBindings }>();
 
+function setAccessTokenCookie(c: Parameters<typeof setCookie>[0], token: string): void {
+  setCookie(c, 'access_token', token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Strict',
+    path: '/api',
+    maxAge: 15 * 60, // 15 minutes
+  });
+}
+
 authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
   const { username, password, displayName, turnstileToken } = c.req.valid('json');
 
@@ -69,10 +79,10 @@ authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
     path: '/api/auth',
     maxAge: 365 * 24 * 60 * 60,
   });
+  setAccessTokenCookie(c, accessToken);
 
   return c.json({
     user: { id: user.id, username: user.username, displayName: user.displayName },
-    accessToken,
   }, 201);
 });
 
@@ -110,10 +120,10 @@ authRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
     path: '/api/auth',
     maxAge: 365 * 24 * 60 * 60,
   });
+  setAccessTokenCookie(c, accessToken);
 
   return c.json({
     user: { id: user.id, username: user.username, displayName: user.displayName },
-    accessToken,
   });
 });
 
@@ -138,7 +148,8 @@ authRoutes.post('/refresh', async (c) => {
   }
 
   const accessToken = await createAccessToken(user.id, user.username, c.env.JWT_SECRET);
-  return c.json({ accessToken });
+  setAccessTokenCookie(c, accessToken);
+  return c.json({ success: true });
 });
 
 authRoutes.post('/logout', async (c) => {
@@ -153,16 +164,16 @@ authRoutes.post('/logout', async (c) => {
   }
 
   deleteCookie(c, 'refresh_token', { path: '/api/auth' });
+  deleteCookie(c, 'access_token', { path: '/api' });
   return c.json({ success: true });
 });
 
 authRoutes.post('/logout-all', async (c) => {
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  const token = getCookie(c, 'access_token') || c.req.header('Authorization')?.slice(7);
+  if (!token) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const token = authHeader.slice(7);
   const payload = await verifyAccessToken(token, c.env.JWT_SECRET);
 
   if (!payload) {
@@ -172,17 +183,17 @@ authRoutes.post('/logout-all', async (c) => {
   const storage = createStorageProvider(c.env);
   await storage.refreshTokens.revokeAllForUser(payload.sub);
   deleteCookie(c, 'refresh_token', { path: '/api/auth' });
+  deleteCookie(c, 'access_token', { path: '/api' });
 
   return c.json({ success: true });
 });
 
 authRoutes.get('/me', async (c) => {
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  const token = getCookie(c, 'access_token') || c.req.header('Authorization')?.slice(7);
+  if (!token) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const token = authHeader.slice(7);
   const payload = await verifyAccessToken(token, c.env.JWT_SECRET);
 
   if (!payload) {
@@ -202,12 +213,11 @@ authRoutes.get('/me', async (c) => {
 });
 
 authRoutes.patch('/password', zValidator('json', passwordSchema), async (c) => {
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
+  const token = getCookie(c, 'access_token') || c.req.header('Authorization')?.slice(7);
+  if (!token) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const token = authHeader.slice(7);
   const payload = await verifyAccessToken(token, c.env.JWT_SECRET);
 
   if (!payload) {
@@ -230,6 +240,7 @@ authRoutes.patch('/password', zValidator('json', passwordSchema), async (c) => {
   await storage.users.updatePassword(user.id, newPassword);
   await storage.refreshTokens.revokeAllForUser(user.id);
   deleteCookie(c, 'refresh_token', { path: '/api/auth' });
+  deleteCookie(c, 'access_token', { path: '/api' });
 
   const { token: refreshToken } = await storage.refreshTokens.create(user.id);
   const accessToken = await createAccessToken(user.id, user.username, c.env.JWT_SECRET);
@@ -241,6 +252,7 @@ authRoutes.patch('/password', zValidator('json', passwordSchema), async (c) => {
     path: '/api/auth',
     maxAge: 365 * 24 * 60 * 60,
   });
+  setAccessTokenCookie(c, accessToken);
 
-  return c.json({ accessToken });
+  return c.json({ success: true });
 });

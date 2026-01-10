@@ -8,7 +8,6 @@ export interface User {
 
 export interface AuthResponse {
   user: User;
-  accessToken: string;
 }
 
 export interface RoomSummary {
@@ -37,6 +36,9 @@ export interface ApiDrawer {
   gridY: number;
   roomId: string;
   sortOrder: number;
+  compartmentWidth?: number;
+  compartmentHeight?: number;
+  updatedAt?: number;
 }
 
 export interface ApiCompartment {
@@ -98,20 +100,9 @@ export interface PendingInvitation {
   createdAt: string;
 }
 
-export type RoomRole = 'owner' | 'editor' | 'viewer';
-
 class ApiClient {
-  private accessToken: string | null = null;
-  private refreshPromise: Promise<string | null> | null = null;
+  private refreshPromise: Promise<boolean> | null = null;
   private onAuthFailure: (() => void) | null = null;
-
-  setToken(token: string | null) {
-    this.accessToken = token;
-  }
-
-  getToken(): string | null {
-    return this.accessToken;
-  }
 
   setAuthFailureHandler(handler: () => void) {
     this.onAuthFailure = handler;
@@ -123,21 +114,17 @@ class ApiClient {
       ...(options.headers as Record<string, string>),
     };
 
-    if (this.accessToken) {
-      headers['Authorization'] = `Bearer ${this.accessToken}`;
-    }
-
     const response = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers,
-      credentials: 'include',
+      credentials: 'include', // Cookies are sent automatically
     });
 
     // Handle 401 - try to refresh token
     if (response.status === 401 && !path.includes('/auth/refresh') && !path.includes('/auth/login') && !path.includes('/auth/register')) {
-      const newToken = await this.refreshToken();
-      if (newToken) {
-        headers['Authorization'] = `Bearer ${newToken}`;
+      const refreshed = await this.refreshToken();
+      if (refreshed) {
+        // Retry with new cookie (set automatically by refresh response)
         const retryResponse = await fetch(`${API_BASE}${path}`, {
           ...options,
           headers,
@@ -155,12 +142,10 @@ class ApiClient {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
-      // Handle different error formats
       let errorMessage = 'Request failed';
       if (typeof errorData.error === 'string') {
         errorMessage = errorData.error;
       } else if (errorData.error?.issues?.[0]?.message) {
-        // Zod validation error format
         errorMessage = errorData.error.issues[0].message;
       } else if (errorData.message) {
         errorMessage = errorData.message;
@@ -173,29 +158,24 @@ class ApiClient {
 
   // Auth endpoints
   async register(username: string, password: string, turnstileToken: string, displayName?: string): Promise<AuthResponse> {
-    const response = await this.fetch<AuthResponse>('/auth/register', {
+    return this.fetch<AuthResponse>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ username, password, displayName, turnstileToken }),
     });
-    this.accessToken = response.accessToken;
-    return response;
   }
 
   async login(username: string, password: string, turnstileToken: string): Promise<AuthResponse> {
-    const response = await this.fetch<AuthResponse>('/auth/login', {
+    return this.fetch<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password, turnstileToken }),
     });
-    this.accessToken = response.accessToken;
-    return response;
   }
 
   async logout(): Promise<void> {
     await this.fetch('/auth/logout', { method: 'POST' });
-    this.accessToken = null;
   }
 
-  async refreshToken(): Promise<string | null> {
+  async refreshToken(): Promise<boolean> {
     // Prevent multiple simultaneous refresh requests
     if (this.refreshPromise) {
       return this.refreshPromise;
@@ -208,17 +188,9 @@ class ApiClient {
           credentials: 'include',
         });
 
-        if (!response.ok) {
-          this.accessToken = null;
-          return null;
-        }
-
-        const data = await response.json() as { accessToken: string };
-        this.accessToken = data.accessToken;
-        return data.accessToken;
+        return response.ok;
       } catch {
-        this.accessToken = null;
-        return null;
+        return false;
       } finally {
         this.refreshPromise = null;
       }
@@ -277,8 +249,12 @@ class ApiClient {
 
   async updateDrawer(roomId: string, drawerId: string, input: {
     name?: string;
+    rows?: number;
+    cols?: number;
     gridX?: number;
     gridY?: number;
+    compartmentWidth?: number;
+    compartmentHeight?: number;
     updatedAt?: number;
   }): Promise<ApiDrawer> {
     const response = await this.fetch<{ drawer: ApiDrawer }>(`/rooms/${roomId}/drawers/${drawerId}`, {
