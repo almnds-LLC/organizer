@@ -3,8 +3,8 @@ import { persist } from 'zustand/middleware';
 import { api } from '../api/client';
 import { roomWebSocket } from '../api/websocket';
 import { useAuthStore } from './authStore';
+import { showToast } from './toastStore';
 
-// Wait for WebSocket to be connected (with timeout)
 function waitForWebSocket(timeoutMs = 5000): Promise<boolean> {
   return new Promise((resolve) => {
     if (roomWebSocket.isConnected()) {
@@ -93,9 +93,7 @@ export const useOfflineStore = create<OfflineState>()(
         const wasOffline = !get().isOnline;
         set({ isOnline: online });
 
-        // Auto-sync when coming back online
         if (online && wasOffline) {
-          // Trigger WebSocket reconnection and wait for it
           roomWebSocket.tryReconnect();
           await waitForWebSocket(5000);
           get().syncPendingOperations();
@@ -117,7 +115,6 @@ export const useOfflineStore = create<OfflineState>()(
           return;
         }
 
-        // Sort by timestamp (oldest first)
         const sortedOps = [...pendingOperations].sort((a, b) => a.timestamp - b.timestamp);
 
         for (const op of sortedOps) {
@@ -125,17 +122,33 @@ export const useOfflineStore = create<OfflineState>()(
             await syncOperation(op, roomId);
             removePendingOperation(op.id);
           } catch (error) {
-            console.error('Failed to sync operation:', op, error);
-
-            // Increment retry count
+            console.error('Failed to sync operation:', error);
             if (op.retries >= 3) {
-              // Remove after too many retries
               removePendingOperation(op.id);
-              set({
-                lastSyncError: `Failed to sync ${op.entity} after multiple attempts`,
+              const errorMessage = `Failed to sync ${op.entity} after multiple attempts`;
+              set({ lastSyncError: errorMessage });
+
+              // Show toast notification
+              showToast({
+                type: 'error',
+                title: 'Sync Failed',
+                message: `Changes to ${op.entity} may be lost.`,
+                action: {
+                  label: 'Retry',
+                  onClick: () => {
+                    // Re-add the operation with reset retries
+                    get().addPendingOperation({
+                      type: op.type,
+                      entity: op.entity,
+                      entityId: op.entityId,
+                      data: op.data,
+                    });
+                    get().syncPendingOperations();
+                  },
+                },
+                duration: 8000,
               });
             } else {
-              // Update retry count
               set((state) => ({
                 pendingOperations: state.pendingOperations.map((p) =>
                   p.id === op.id ? { ...p, retries: p.retries + 1 } : p
@@ -160,8 +173,6 @@ export const useOfflineStore = create<OfflineState>()(
 );
 
 async function syncOperation(op: PendingOperation, roomId: string): Promise<void> {
-  // Note: Server now handles broadcasting on all API calls, so we just call the API
-  // Include the original timestamp for conflict resolution
   switch (op.entity) {
     case 'drawer':
       if (op.type === 'create') {
