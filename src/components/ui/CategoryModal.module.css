@@ -20,17 +20,45 @@
 }
 
 .categoryItem {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
   background: #f9fafb;
   border-radius: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.625rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
 .categoryItem:last-child {
   margin-bottom: 0;
+}
+
+.categoryItem.dragging {
+  opacity: 0.5;
+  background: #e5e7eb;
+}
+
+/* Drag handle */
+.dragHandle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: #9ca3af;
+  cursor: grab;
+  flex-shrink: 0;
+  touch-action: none;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.dragHandle:hover {
+  color: #6b7280;
 }
 
 .categorySwatch {
@@ -112,28 +140,68 @@
 .colorBtn {
   width: 28px;
   height: 28px;
-  border: 2px solid transparent;
-  border-radius: 0.375rem;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  position: relative;
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
+  /* Inner border for definition */
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
 .colorBtn:hover {
-  transform: scale(1.1);
+  filter: brightness(1.1);
 }
 
 .colorBtn.active {
-  border-color: #111827;
-  box-shadow: 0 0 0 2px white, 0 0 0 4px #111827;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25);
 }
 
+/* Checkmark for selected state */
+.colorBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 6px;
+  border: 2px solid white;
+  border-top: none;
+  border-right: none;
+  transform: translate(-50%, -60%) rotate(-45deg) scale(0);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+  opacity: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.colorBtn.active::after {
+  transform: translate(-50%, -60%) rotate(-45deg) scale(1);
+  opacity: 1;
+}
+
+/* Custom color button */
 .customColorBtn {
   position: relative;
-  background: linear-gradient(135deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+  overflow: hidden;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #e5e7eb;
+}
+
+/* Rainbow gradient when no custom color */
+.customColorBtn::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: conic-gradient(
+    from 0deg,
+    #f87171, #fbbf24, #34d399, #60a5fa, #a78bfa, #f472b6, #f87171
+  );
+  border-radius: 4px;
+  transition: opacity 0.15s ease;
+}
+
+.customColorBtn.hasCustomColor::before {
+  opacity: 0;
 }
 
 .customColorBtn input[type="color"] {
@@ -145,12 +213,24 @@
   cursor: pointer;
 }
 
-.customColorIcon {
-  font-size: 1rem;
-  font-weight: 600;
+/* "+" icon centered */
+.colorIcon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
   color: white;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   pointer-events: none;
+  z-index: 1;
+  transition: opacity 0.15s ease;
+}
+
+.customColorBtn.hasCustomColor .colorIcon {
+  opacity: 0;
 }
 
 .addCategoryForm {

@@ -1,4 +1,5 @@
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useState, useRef, useMemo } from 'react';
+import { GripVertical } from 'lucide-react';
 import { useDrawerStore, getCategoryColor } from '../../store/drawerStore';
 import { COLOR_PRESETS } from '../../constants/defaults';
 import { Modal, Button } from './shared';
@@ -63,9 +64,36 @@ export function CategoryModal() {
     addCategory,
     updateCategory,
     removeCategory,
+    reorderCategories,
   } = useDrawerStore();
 
   const [form, dispatch] = useReducer(formReducer, initialState);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const draggedIndexRef = useRef<number>(-1);
+
+  const baseOrderedCategories = useMemo(() => {
+    return Object.values(categories).sort((a, b) => {
+      if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
+        return a.displayOrder - b.displayOrder;
+      }
+      if (a.displayOrder !== undefined) return -1;
+      if (b.displayOrder !== undefined) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [categories]);
+
+  const orderedCategories = useMemo(() => {
+    if (!draggedId || dragOverIndex === null) return baseOrderedCategories;
+
+    const fromIndex = baseOrderedCategories.findIndex(c => c.id === draggedId);
+    if (fromIndex === -1 || fromIndex === dragOverIndex) return baseOrderedCategories;
+
+    const result = [...baseOrderedCategories];
+    const [dragged] = result.splice(fromIndex, 1);
+    result.splice(dragOverIndex, 0, dragged);
+    return result;
+  }, [baseOrderedCategories, draggedId, dragOverIndex]);
 
   const handleClose = useCallback(() => {
     setCategoryModalOpen(false);
@@ -97,16 +125,63 @@ export function CategoryModal() {
     dispatch({ type: 'CANCEL_EDIT' });
   }, []);
 
+  const handleDragStart = useCallback((e: React.DragEvent, id: string, index: number) => {
+    setDraggedId(id);
+    draggedIndexRef.current = index;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedId(null);
+    setDragOverIndex(null);
+    draggedIndexRef.current = -1;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  }, [dragOverIndex]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+
+    if (!draggedId || dragOverIndex === null) {
+      setDraggedId(null);
+      setDragOverIndex(null);
+      draggedIndexRef.current = -1;
+      return;
+    }
+
+    const newOrder = orderedCategories.map(c => c.id);
+    reorderCategories(newOrder);
+
+    setDraggedId(null);
+    setDragOverIndex(null);
+    draggedIndexRef.current = -1;
+  }, [draggedId, dragOverIndex, orderedCategories, reorderCategories]);
+
   return (
     <Modal isOpen={isCategoryModalOpen} onClose={handleClose} title="Manage Categories" className={styles.modal}>
       <div className={styles.content}>
         {/* Existing categories */}
         <div className={styles.categoryList}>
-          {Object.values(categories).length === 0 ? (
+          {orderedCategories.length === 0 ? (
             <p className={styles.noCategories}>No categories yet. Add one below.</p>
           ) : (
-            Object.values(categories).map((cat) => (
-              <div key={cat.id} className={styles.categoryItem}>
+            orderedCategories.map((cat, index) => (
+              <div
+                key={cat.id}
+                className={`${styles.categoryItem} ${draggedId === cat.id ? styles.dragging : ''}`}
+                draggable={form.editingId !== cat.id}
+                onDragStart={(e) => handleDragStart(e, cat.id, index)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={handleDrop}
+              >
                 {form.editingId === cat.id ? (
                   <div className={styles.categoryEditForm}>
                     <input
@@ -125,14 +200,22 @@ export function CategoryModal() {
                           onClick={() => dispatch({ type: 'SET_EDIT_COLOR', value: color })}
                         />
                       ))}
-                      <label className={`${styles.colorBtn} ${styles.customColorBtn}`}>
-                        <input
-                          type="color"
-                          value={form.editColor}
-                          onChange={(e) => dispatch({ type: 'SET_EDIT_COLOR', value: e.target.value })}
-                        />
-                        <span className={styles.customColorIcon}>+</span>
-                      </label>
+                      {(() => {
+                        const isCustom = !COLOR_PRESETS.includes(form.editColor);
+                        return (
+                          <label
+                            className={`${styles.colorBtn} ${styles.customColorBtn} ${isCustom ? styles.hasCustomColor : ''} ${isCustom ? styles.active : ''}`}
+                            style={isCustom ? { backgroundColor: form.editColor } : undefined}
+                          >
+                            <input
+                              type="color"
+                              value={form.editColor}
+                              onChange={(e) => dispatch({ type: 'SET_EDIT_COLOR', value: e.target.value })}
+                            />
+                            <span className={styles.colorIcon}>+</span>
+                          </label>
+                        );
+                      })()}
                     </div>
                     <div className={styles.editActions}>
                       <Button variant="secondary" size="sm" onClick={cancelEdit}>
@@ -145,6 +228,9 @@ export function CategoryModal() {
                   </div>
                 ) : (
                   <>
+                    <div className={styles.dragHandle} title="Drag to reorder">
+                      <GripVertical size={16} />
+                    </div>
                     <span
                       className={styles.categorySwatch}
                       style={{ backgroundColor: getCategoryColor(cat) }}
@@ -201,14 +287,22 @@ export function CategoryModal() {
                   onClick={() => dispatch({ type: 'SET_NEW_COLOR', value: color })}
                 />
               ))}
-              <label className={`${styles.colorBtn} ${styles.customColorBtn}`}>
-                <input
-                  type="color"
-                  value={form.newColor}
-                  onChange={(e) => dispatch({ type: 'SET_NEW_COLOR', value: e.target.value })}
-                />
-                <span className={styles.customColorIcon}>+</span>
-              </label>
+              {(() => {
+                const isCustom = !COLOR_PRESETS.includes(form.newColor);
+                return (
+                  <label
+                    className={`${styles.colorBtn} ${styles.customColorBtn} ${isCustom ? styles.hasCustomColor : ''} ${isCustom ? styles.active : ''}`}
+                    style={isCustom ? { backgroundColor: form.newColor } : undefined}
+                  >
+                    <input
+                      type="color"
+                      value={form.newColor}
+                      onChange={(e) => dispatch({ type: 'SET_NEW_COLOR', value: e.target.value })}
+                    />
+                    <span className={styles.colorIcon}>+</span>
+                  </label>
+                );
+              })()}
             </div>
           </div>
           <Button
