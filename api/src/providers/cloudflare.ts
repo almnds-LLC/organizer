@@ -46,7 +46,7 @@ export function createRealtimeProvider(env: { ROOM_SYNC: DurableObjectNamespace 
               body: JSON.stringify(message),
             });
           } catch (error) {
-            console.error('Failed to broadcast message:', error);
+            console.error('Failed to broadcast to room:', error);
           }
         },
       };

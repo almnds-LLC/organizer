@@ -3,15 +3,12 @@ import { create } from 'zustand';
 interface RemoteCursor {
   userId: string;
   username: string;
-  // World coordinates (shared across clients)
   worldX: number;
   worldY: number;
-  // Screen coordinates (calculated locally for rendering)
   screenX: number;
   screenY: number;
   drawerId?: string;
   compartmentId?: string;
-  // Selected compartments for mass selection highlight
   selectedCompartmentIds?: string[];
   lastUpdate: number;
   color: string;
@@ -63,7 +60,6 @@ export const useCursorStore = create<CursorState>((set, get) => ({
           username,
           worldX: position.worldX,
           worldY: position.worldY,
-          // Keep existing screen position until projection updates it
           screenX: existing?.screenX ?? 0,
           screenY: existing?.screenY ?? 0,
           drawerId: position.drawerId,
@@ -85,7 +81,6 @@ export const useCursorStore = create<CursorState>((set, get) => ({
 
     for (const [userId, cursor] of state.remoteCursors) {
       const { screenX, screenY } = projectFn(cursor.worldX, cursor.worldY);
-      // Only update if position changed (with small threshold to avoid floating point issues)
       const changed = Math.abs(cursor.screenX - screenX) > 0.5 || Math.abs(cursor.screenY - screenY) > 0.5;
       if (changed) {
         hasChanges = true;
@@ -95,7 +90,6 @@ export const useCursorStore = create<CursorState>((set, get) => ({
       }
     }
 
-    // Only update store if something changed
     if (hasChanges) {
       set({ remoteCursors: newCursors });
     }
@@ -105,8 +99,6 @@ export const useCursorStore = create<CursorState>((set, get) => ({
     const { cursorColors } = get();
     const existingColor = cursorColors.get(userId);
     if (existingColor) return existingColor;
-
-    // Generate consistent color from userId hash
     return CURSOR_COLORS[hashString(userId) % CURSOR_COLORS.length];
   },
 

@@ -97,8 +97,12 @@ export interface SyncCategory {
 
 export interface SyncDrawerUpdate {
   name?: string;
+  rows?: number;
+  cols?: number;
   gridX?: number;
   gridY?: number;
+  compartmentWidth?: number;
+  compartmentHeight?: number;
 }
 
 // Connection metadata

@@ -1,5 +1,4 @@
 import type { RoomRole } from '../storage/types';
-import { ForbiddenError } from '../lib/errors';
 
 export type Permission =
   | 'room:read'
@@ -55,15 +54,7 @@ export function hasPermission(role: RoomRole | null, permission: Permission): bo
   return rolePermissions[role].includes(permission);
 }
 
-export function requirePermission(role: RoomRole | null, permission: Permission): void {
-  if (!hasPermission(role, permission)) {
-    throw new ForbiddenError(`Missing permission: ${permission}`);
-  }
-}
-
 export function canInvite(role: RoomRole, canInviteFlag: boolean): boolean {
-  // Owners always can invite
   if (role === 'owner') return true;
-  // Others need explicit permission
   return canInviteFlag;
 }

@@ -18,7 +18,7 @@ const updateCategorySchema = z.object({
   name: z.string().min(1).max(50).optional(),
   colorIndex: z.number().int().min(0).max(9).nullable().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
-  updatedAt: z.number().optional(), // Client timestamp for conflict resolution
+  updatedAt: z.number().optional(),
 });
 
 type Variables = { auth: AuthContext };
@@ -70,7 +70,6 @@ categoryRoutes.post(
 
     const category = await storage.categories.create(roomId, input);
 
-    // Broadcast creation to connected clients
     const realtime = createRealtimeProvider(c.env);
     await realtime.getRoom(roomId).broadcast({
       type: 'category_created',
@@ -104,12 +103,10 @@ categoryRoutes.patch(
 
     const category = await storage.categories.update(categoryId, input);
 
-    // If null, update was skipped due to older timestamp
     if (!category) {
       return c.json({ category: existing, skipped: true });
     }
 
-    // Broadcast update to connected clients - use actual saved values
     const realtime = createRealtimeProvider(c.env);
     await realtime.getRoom(roomId).broadcast({
       type: 'category_updated',
@@ -139,7 +136,6 @@ categoryRoutes.delete('/rooms/:roomId/categories/:categoryId', async (c) => {
 
   await storage.categories.delete(categoryId);
 
-  // Broadcast deletion to connected clients
   const realtime = createRealtimeProvider(c.env);
   await realtime.getRoom(roomId).broadcast({
     type: 'category_deleted',

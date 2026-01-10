@@ -195,7 +195,6 @@ roomRoutes.post('/:roomId/invite', zValidator('json', inviteSchema), async (c) =
     throw new ForbiddenError('You cannot invite someone with a higher role than your own');
   }
 
-  // Only owners can grant the canInvite permission
   const effectiveCanInvite = membership.role === 'owner' ? inviteeCanInvite : undefined;
 
   const invitee = await storage.users.findByUsername(username);
@@ -245,22 +244,13 @@ roomRoutes.delete('/:roomId/members/:userId', async (c) => {
       throw new ForbiddenError('Owner cannot leave the room');
     }
     await storage.rooms.removeMember(roomId, userId);
-
-    // Notify the Durable Object to kick the user (self-removal)
-    const doId = c.env.ROOM_SYNC.idFromName(roomId);
-    const stub = c.env.ROOM_SYNC.get(doId);
-    await stub.fetch(`http://internal/kick-user/${userId}?roomId=${roomId}`, { method: 'POST' });
-
-    return c.json({ success: true });
+  } else {
+    if (!hasPermission(membership.role, 'member:remove')) {
+      throw new ForbiddenError();
+    }
+    await storage.rooms.removeMember(roomId, userId);
   }
 
-  if (!hasPermission(membership.role, 'member:remove')) {
-    throw new ForbiddenError();
-  }
-
-  await storage.rooms.removeMember(roomId, userId);
-
-  // Notify the Durable Object to kick the removed user
   const doId = c.env.ROOM_SYNC.idFromName(roomId);
   const stub = c.env.ROOM_SYNC.get(doId);
   await stub.fetch(`http://internal/kick-user/${userId}?roomId=${roomId}`, { method: 'POST' });

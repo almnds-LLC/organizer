@@ -134,8 +134,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     try {
       await api.logout();
-    } catch {
-      // Ignore errors, still clear local state
+    } catch (error) {
+      console.error('Failed to logout:', error);
     }
 
     // Disconnect WebSocket and clear cursors
@@ -192,7 +192,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       get().loadInvitations();
 
       return true;
-    } catch {
+    } catch (error) {
+      console.error('Failed to check auth:', error);
       set({ isLoading: false, isInitialized: true });
       return false;
     }
@@ -312,7 +313,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Room already has data, don't migrate
         // Clear localStorage to prevent future migration attempts
         localStorage.removeItem(localStorageKey);
-        console.log('Room already has data, skipping migration');
+        // Room already has data, skipping migration
         return;
       }
 
@@ -327,8 +328,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               color: category.color,
             });
             categoryIdMap[category.id] = newCategory.id;
-          } catch {
-            // Category might already exist, continue
+          } catch (error) {
+            console.error('Failed to migrate category:', error);
           }
         }
       }
@@ -401,13 +402,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             }
           }
         } catch (error) {
-          console.error('Failed to migrate drawer:', drawer.name, error);
+          console.error('Failed to migrate drawer:', error);
         }
       }
 
       // Clear local storage after successful migration
       localStorage.removeItem(localStorageKey);
-      console.log('Local data migrated successfully');
     } catch (error) {
       console.error('Failed to migrate local data:', error);
     }

@@ -160,7 +160,6 @@ export class RoomRepository implements IRoomRepository {
     await this.db.prepare('DELETE FROM rooms WHERE id = ?').bind(id).run();
   }
 
-  // Member management
   async getMembers(roomId: string): Promise<(RoomMember & { username: string; displayName: string | null })[]> {
     const rows = await this.db
       .prepare(
@@ -189,7 +188,6 @@ export class RoomRepository implements IRoomRepository {
   ): Promise<RoomMember> {
     const id = generateId();
     const now = new Date().toISOString();
-    // If canInvite not specified, owners automatically get it, others don't
     const memberCanInvite = canInvite ?? (role === 'owner');
 
     await this.db
@@ -241,7 +239,6 @@ export class RoomRepository implements IRoomRepository {
       .run();
   }
 
-  // Invitations
   async createInvitation(
     roomId: string,
     inviteeId: string,
@@ -249,11 +246,9 @@ export class RoomRepository implements IRoomRepository {
     invitedBy: string,
     canInvite?: boolean
   ): Promise<RoomInvitation> {
-    // Check if already a member
     const existing = await this.getMemberRole(roomId, inviteeId);
     if (existing) throw new ConflictError('User is already a member of this room');
 
-    // Check if already invited
     const existingInvite = await this.db
       .prepare('SELECT id FROM room_invitations WHERE room_id = ? AND invitee_id = ?')
       .bind(roomId, inviteeId)
@@ -262,7 +257,6 @@ export class RoomRepository implements IRoomRepository {
 
     const id = generateId();
     const now = new Date().toISOString();
-    // If canInvite not specified, owners automatically get it, others don't
     const inviteeCanInvite = canInvite ?? (role === 'owner');
 
     await this.db

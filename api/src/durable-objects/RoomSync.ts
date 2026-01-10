@@ -30,7 +30,8 @@ export class RoomSync implements DurableObject {
   private getConnectionData(ws: WebSocket): ConnectionData | null {
     try {
       return ws.deserializeAttachment() as ConnectionData | null;
-    } catch {
+    } catch (error) {
+      console.error('Failed to deserialize WebSocket attachment:', error);
       return null;
     }
   }
@@ -89,7 +90,8 @@ export class RoomSync implements DurableObject {
         return new Response(JSON.stringify({ success: true }), {
           headers: { 'Content-Type': 'application/json' },
         });
-      } catch {
+      } catch (error) {
+        console.error('Failed to parse broadcast message:', error);
         return new Response(JSON.stringify({ error: 'Invalid message' }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' },
@@ -174,7 +176,6 @@ export class RoomSync implements DurableObject {
       const connectionInfo = this.getConnectionData(ws);
 
       if (!connectionInfo) {
-        console.error('No connection info for WebSocket');
         return;
       }
 
@@ -193,7 +194,7 @@ export class RoomSync implements DurableObject {
       // Broadcast to all other connections (including other tabs from same user)
       this.broadcast(syncMessage, connectionInfo.connectionId);
     } catch (error) {
-      console.error('Error handling WebSocket message:', error);
+      console.error('Failed to process WebSocket message:', error);
       ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
     }
   }
@@ -244,7 +245,7 @@ export class RoomSync implements DurableObject {
         try {
           ws.send(messageStr);
         } catch (error) {
-          console.error('Error forwarding RTC message:', error);
+          console.error('Failed to send RTC message:', error);
         }
       }
     }
@@ -269,8 +270,7 @@ export class RoomSync implements DurableObject {
   }
 
   // Handle WebSocket errors
-  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
-    console.error('WebSocket error:', error);
+  async webSocketError(_ws: WebSocket, _error: unknown): Promise<void> {
     // The WebSocket will be automatically removed from state.getWebSockets() when closed
     // No need to manually track or remove
   }
@@ -301,8 +301,7 @@ export class RoomSync implements DurableObject {
         try {
           ws.send(messageStr);
         } catch (error) {
-          console.error('Error broadcasting to connection:', data.connectionId, error);
-          // WebSocket will be automatically cleaned up when it closes
+          console.error('Failed to broadcast message:', error);
         }
       }
     }
@@ -322,7 +321,7 @@ export class RoomSync implements DurableObject {
           ws.send(messageStr);
           ws.close(1000, 'Removed from room');
         } catch (error) {
-          console.error('Error kicking user:', error);
+          console.error('Failed to kick user:', error);
         }
       }
     }

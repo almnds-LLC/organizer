@@ -29,8 +29,6 @@ app.use(
 
 // Error handling
 app.onError((err, c) => {
-  console.error('Error:', err);
-
   if (err instanceof AppError) {
     return c.json(
       { error: err.message, code: err.code },

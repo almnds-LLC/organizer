@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { sign, verify } from 'hono/jwt';
 
 const ACCESS_TOKEN_EXPIRY = 15 * 60; // 15 minutes
@@ -13,13 +13,6 @@ export interface AccessTokenPayload {
 
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('base64');
-}
-
-export function safeCompare(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
 }
 
 export function generateRefreshToken(): string {

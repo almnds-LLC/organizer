@@ -14,20 +14,6 @@ import type { RoomWithDrawers } from '../api/client';
 import { useAuthStore } from './authStore';
 import { useOfflineStore } from './offlineStore';
 import {
-  broadcastDrawerCreated,
-  broadcastDrawerUpdated,
-  broadcastDrawerDeleted,
-  broadcastCompartmentUpdated,
-  broadcastDividersChanged,
-  broadcastCompartmentsMerged,
-  broadcastCompartmentSplit,
-  broadcastItemUpdated,
-  broadcastItemsBatchUpdated,
-  broadcastCategoryCreated,
-  broadcastCategoryUpdated,
-  broadcastCategoryDeleted,
-} from '../api/syncService';
-import {
   DEFAULT_DRAWER_ROWS,
   DEFAULT_DRAWER_COLS,
   DEFAULT_DIVIDER_COUNT,
@@ -126,6 +112,8 @@ function createDrawer(options: CreateDrawerOptions & { gridX?: number; gridY?: n
     name: options.name,
     rows,
     cols,
+    compartmentWidth: options.compartmentWidth,
+    compartmentHeight: options.compartmentHeight,
     compartments,
     gridX: options.gridX ?? 0,
     gridY: options.gridY ?? 0,
@@ -205,16 +193,7 @@ function fuzzyMatch(query: string, text: string): boolean {
     textLower.replace(/[^a-z0-9]/g, '').includes(part.replace(/[^a-z0-9]/g, ''))
   );
 
-  if (allPartsMatch) return true;
-
-  let queryIndex = 0;
-  for (let i = 0; i < normalizedText.length && queryIndex < normalizedQuery.length; i++) {
-    if (normalizedText[i] === normalizedQuery[queryIndex]) {
-      queryIndex++;
-    }
-  }
-
-  return queryIndex === normalizedQuery.length;
+  return allPartsMatch;
 }
 
 export type PanelMode = 'inventory' | 'edit';
@@ -222,14 +201,14 @@ export type PanelSnapPoint = 'collapsed' | 'half' | 'full';
 export type InventoryGrouping = 'category' | 'drawer' | 'flat';
 
 interface DrawerStore {
-  // State
   drawers: Record<string, Drawer>;
-  drawerOrder: string[]; // Order of drawer IDs for display
+  drawerOrder: string[];
   activeDrawerId: string | null;
   categories: Record<string, Category>;
-  selectedDrawerIds: Set<string>; // Selected drawers for editing
+  selectedDrawerIds: Set<string>;
   selectedCompartmentIds: Set<string>;
   selectedSubCompartmentId: string | null;
+  selectedInventoryIds: Set<string>;
   editMode: EditMode;
   isMobileMenuOpen: boolean;
   isAddDrawerModalOpen: boolean;
@@ -244,25 +223,26 @@ interface DrawerStore {
   inventoryGrouping: InventoryGrouping;
   panelWasVisibleBeforeEdit: boolean;
 
-  // Drawer actions
   addDrawer: (options: CreateDrawerOptions) => void | Promise<void>;
+  duplicateDrawer: (drawerId: string) => void | Promise<void>;
   removeDrawer: (drawerId: string) => void | Promise<void>;
   renameDrawer: (drawerId: string, name: string) => void | Promise<void>;
   setActiveDrawer: (drawerId: string) => void;
-  resizeDrawer: (drawerId: string, rows: number, cols: number) => void;
+  resizeDrawer: (drawerId: string, rows: number, cols: number) => void | Promise<void>;
+  setCompartmentSize: (drawerId: string, width: number, height: number) => void;
   moveDrawerInGrid: (drawerId: string, gridX: number, gridY: number) => boolean | Promise<boolean>;
   canMoveDrawerTo: (drawerId: string, gridX: number, gridY: number) => boolean;
   selectDrawer: (drawerId: string, additive?: boolean) => void;
   toggleDrawerSelection: (drawerId: string) => void;
   clearDrawerSelection: () => void;
 
-  // Category actions
   addCategory: (name: string, colorOrIndex: string | number) => void | Promise<void>;
   updateCategory: (id: string, name: string, colorOrIndex: string | number) => void | Promise<void>;
   removeCategory: (id: string) => void | Promise<void>;
+  reorderCategories: (orderedIds: string[]) => void;
+  getOrderedCategories: () => Category[];
   getCategoryColor: (categoryId: string) => string | undefined;
 
-  // Compartment actions
   setDividerCount: (compartmentId: string, count: number) => void | Promise<void>;
   setDividerOrientation: (
     compartmentId: string,
@@ -271,14 +251,12 @@ interface DrawerStore {
   mergeSelectedCompartments: () => Promise<void>;
   splitCompartment: (compartmentId: string) => Promise<void>;
 
-  // Sub-compartment actions
   updateItem: (
     compartmentId: string,
     subCompartmentId: string,
     item: StoredItem | null
   ) => void | Promise<void>;
 
-  // Selection actions
   selectCompartment: (compartmentId: string, additive?: boolean, drawerId?: string) => void;
   selectSubCompartment: (subCompartmentId: string | null) => void;
   clearSelection: () => void;
@@ -286,57 +264,48 @@ interface DrawerStore {
   selectRectangle: (fromRow: number, fromCol: number, toRow: number, toCol: number) => void;
   lastSelectedPosition: { row: number; col: number } | null;
 
-  // Hover tracking for collaborator cursors
   hoveredCompartmentId: string | null;
   setHoveredCompartment: (compartmentId: string | null) => void;
 
-  // Touch interaction tracking (disables camera pan during long-press)
   isPointerDownOnCompartment: boolean;
   setPointerDownOnCompartment: (down: boolean) => void;
 
-  // Rectangle drag selection (mobile long-press + drag)
   rectangleSelectStart: { row: number; col: number; drawerId: string } | null;
   setRectangleSelectStart: (start: { row: number; col: number; drawerId: string } | null) => void;
-  updateRectangleSelect: (endRow: number, endCol: number) => void; // Updates selection in real-time during drag
-  completeRectangleSelect: () => void; // Finalizes selection and clears start
+  updateRectangleSelect: (endRow: number, endCol: number) => void;
+  completeRectangleSelect: () => void;
 
-  // Edit mode actions
   setEditMode: (mode: EditMode) => void;
 
-  // Mass edit actions
   applyToSelected: (item: Partial<StoredItem>) => void | Promise<void>;
-  setDividerCountForSelected: (count: number) => void;
 
-  // Search actions
+  toggleInventorySelection: (drawerId: string, compartmentId: string, subCompartmentId: string) => void;
+  clearInventorySelection: () => void;
+  selectAllInventory: (items: Array<{ drawerId: string; compartmentId: string; subCompartmentId: string }>) => void;
+  applyToSelectedInventory: (item: Partial<StoredItem>) => void | Promise<void>;
+
   setSearchQuery: (query: string) => void;
 
-  // UI actions
   setMobileMenuOpen: (open: boolean) => void;
   setAddDrawerModalOpen: (open: boolean) => void;
   setCategoryModalOpen: (open: boolean) => void;
 
-  // Panel actions
   setPanelVisible: (visible: boolean) => void;
   togglePanel: () => void;
   setPanelMode: (mode: PanelMode) => void;
   setPanelSnapPoint: (snap: PanelSnapPoint) => void;
-  onSheetDragStart: () => void;
   setInventoryGrouping: (grouping: InventoryGrouping) => void;
   navigateToItem: (drawerId: string, compartmentId: string) => void;
   navigateToDrawer: (drawerId: string) => void;
-  enterEditMode: () => void; // Enter edit mode, save panel state
-  exitEditMode: () => void; // Go back from edit, restore panel visibility
+  enterEditMode: () => void;
+  exitEditMode: () => void;
 
-  // Helpers
   getActiveDrawer: () => Drawer | null;
   getCompartment: (compartmentId: string) => Compartment | null;
   getCategory: (categoryId: string) => Category | undefined;
   getOrderedDrawers: () => Drawer[];
 
-  // API integration
   loadFromApi: (room: RoomWithDrawers) => void;
-
-  // Data management
   clearRoomData: () => void;
 }
 
@@ -347,6 +316,7 @@ export const useDrawerStore = create<DrawerStore>()(
       selectedDrawerIds: new Set<string>(),
       selectedCompartmentIds: new Set<string>(),
       selectedSubCompartmentId: null,
+      selectedInventoryIds: new Set<string>(),
       editMode: 'view' as EditMode,
       isMobileMenuOpen: false,
       isAddDrawerModalOpen: false,
@@ -370,7 +340,6 @@ export const useDrawerStore = create<DrawerStore>()(
         const cols = options.cols ?? DEFAULT_DRAWER_COLS;
         const { gridX, gridY } = findNextAvailablePosition(state.drawers, cols, rows);
 
-        // If online, create via API and use server-generated IDs
         if (authState.mode === 'online' && authState.currentRoomId) {
           try {
             const apiDrawer = await api.createDrawer(authState.currentRoomId, {
@@ -416,9 +385,6 @@ export const useDrawerStore = create<DrawerStore>()(
               activeDrawerId: newDrawer.id,
               isAddDrawerModalOpen: false,
             }));
-
-            // Broadcast to other connected users
-            broadcastDrawerCreated(newDrawer, get().drawerOrder.length - 1);
           } catch (error) {
             console.error('Failed to create drawer:', error);
           }
@@ -433,10 +399,67 @@ export const useDrawerStore = create<DrawerStore>()(
         }
       },
 
+      duplicateDrawer: async (drawerId) => {
+        const state = get();
+        const sourceDrawer = state.drawers[drawerId];
+        if (!sourceDrawer) return;
+
+        const firstComp = Object.values(sourceDrawer.compartments)[0];
+        const defaultDividerCount = firstComp ? firstComp.subCompartments.length - 1 : DEFAULT_DIVIDER_COUNT;
+
+        const options: CreateDrawerOptions = {
+          name: `${sourceDrawer.name} (Copy)`,
+          rows: sourceDrawer.rows,
+          cols: sourceDrawer.cols,
+          defaultDividerCount,
+          compartmentWidth: sourceDrawer.compartmentWidth,
+          compartmentHeight: sourceDrawer.compartmentHeight,
+        };
+
+        await get().addDrawer(options);
+
+        const newState = get();
+        const newDrawerId = newState.drawerOrder[newState.drawerOrder.length - 1];
+        if (newDrawerId) {
+          set({
+            selectedDrawerIds: new Set([newDrawerId]),
+            editMode: 'single',
+            panelMode: 'edit',
+            isPanelVisible: true,
+          });
+        }
+      },
+
+      setCompartmentSize: async (drawerId, width, height) => {
+        const authState = useAuthStore.getState();
+
+        set((state) => ({
+          drawers: {
+            ...state.drawers,
+            [drawerId]: {
+              ...state.drawers[drawerId],
+              compartmentWidth: width,
+              compartmentHeight: height,
+            },
+          },
+        }));
+
+        if (authState.mode === 'online' && authState.currentRoomId) {
+          try {
+            await api.updateDrawer(authState.currentRoomId, drawerId, {
+              compartmentWidth: width,
+              compartmentHeight: height,
+              updatedAt: Date.now(),
+            });
+          } catch (error) {
+            console.error('Failed to sync compartment size:', error);
+          }
+        }
+      },
+
       removeDrawer: async (drawerId) => {
         const authState = useAuthStore.getState();
 
-        // If online, delete via API first
         if (authState.mode === 'online' && authState.currentRoomId) {
           try {
             await api.deleteDrawer(authState.currentRoomId, drawerId);
@@ -462,16 +485,12 @@ export const useDrawerStore = create<DrawerStore>()(
             selectedSubCompartmentId: null,
           };
         });
-
-        // Broadcast to other connected users
-        broadcastDrawerDeleted(drawerId);
       },
 
       renameDrawer: async (drawerId, name) => {
         const authState = useAuthStore.getState();
         const timestamp = Date.now();
 
-        // If online, update via API
         if (authState.mode === 'online' && authState.currentRoomId) {
           try {
             await api.updateDrawer(authState.currentRoomId, drawerId, { name, updatedAt: timestamp });
@@ -487,9 +506,6 @@ export const useDrawerStore = create<DrawerStore>()(
             [drawerId]: { ...state.drawers[drawerId], name },
           },
         }));
-
-        // Broadcast to other connected users
-        broadcastDrawerUpdated(drawerId, { name });
       },
 
       setActiveDrawer: (drawerId) => {
@@ -503,24 +519,42 @@ export const useDrawerStore = create<DrawerStore>()(
         });
       },
 
-      resizeDrawer: (drawerId, rows, cols) => {
+      resizeDrawer: async (drawerId, rows, cols) => {
+        const authState = useAuthStore.getState();
         const drawer = get().drawers[drawerId];
         if (!drawer) return;
 
         const compartments: Record<string, Compartment> = {};
-        const existingByPosition: Record<string, Compartment> = {};
+        // Track which cells are occupied (by compartment ID)
+        const occupiedCells = new Set<string>();
 
         Object.values(drawer.compartments).forEach((comp) => {
-          existingByPosition[`${comp.row}-${comp.col}`] = comp;
+          if (comp.row >= rows || comp.col >= cols) {
+            return;
+          }
+
+          const newRowSpan = Math.min(comp.rowSpan ?? 1, rows - comp.row);
+          const newColSpan = Math.min(comp.colSpan ?? 1, cols - comp.col);
+
+          const adjustedComp = {
+            ...comp,
+            rowSpan: newRowSpan,
+            colSpan: newColSpan,
+          };
+
+          compartments[comp.id] = adjustedComp;
+
+          for (let r = comp.row; r < comp.row + newRowSpan; r++) {
+            for (let c = comp.col; c < comp.col + newColSpan; c++) {
+              occupiedCells.add(`${r}-${c}`);
+            }
+          }
         });
 
         for (let row = 0; row < rows; row++) {
           for (let col = 0; col < cols; col++) {
             const key = `${row}-${col}`;
-            const existing = existingByPosition[key];
-            if (existing) {
-              compartments[existing.id] = existing;
-            } else {
+            if (!occupiedCells.has(key)) {
               const newComp = createCompartment(row, col);
               compartments[newComp.id] = newComp;
             }
@@ -535,6 +569,18 @@ export const useDrawerStore = create<DrawerStore>()(
           selectedCompartmentIds: new Set(),
           selectedSubCompartmentId: null,
         }));
+
+        if (authState.mode === 'online' && authState.currentRoomId) {
+          try {
+            await api.updateDrawer(authState.currentRoomId, drawerId, {
+              rows,
+              cols,
+              updatedAt: Date.now(),
+            });
+          } catch (error) {
+            console.error('Failed to sync drawer resize:', error);
+          }
+        }
       },
 
       canMoveDrawerTo: (drawerId, gridX, gridY) => {
@@ -556,13 +602,11 @@ export const useDrawerStore = create<DrawerStore>()(
 
         const timestamp = Date.now();
 
-        // If online and connected, update via API
         if (authState.mode === 'online' && authState.currentRoomId && isOnline) {
           try {
             await api.updateDrawer(authState.currentRoomId, drawerId, { gridX, gridY, updatedAt: timestamp });
           } catch (error) {
-            console.error('Failed to move drawer:', error);
-            // Queue for later sync and continue with local update
+            console.error('Failed to move drawer, queuing for later:', error);
             addPendingOperation({
               type: 'update',
               entity: 'drawer',
@@ -571,7 +615,6 @@ export const useDrawerStore = create<DrawerStore>()(
             });
           }
         } else if (authState.mode === 'online' && authState.currentRoomId && !isOnline) {
-          // Offline but authenticated - queue for later
           addPendingOperation({
             type: 'update',
             entity: 'drawer',
@@ -586,9 +629,6 @@ export const useDrawerStore = create<DrawerStore>()(
             [drawerId]: { ...drawer, gridX, gridY },
           },
         }));
-
-        // Broadcast to other connected users (will be no-op if offline)
-        broadcastDrawerUpdated(drawerId, { gridX, gridY });
         return true;
       },
 
@@ -630,7 +670,6 @@ export const useDrawerStore = create<DrawerStore>()(
       addCategory: async (name, colorOrIndex) => {
         const authState = useAuthStore.getState();
 
-        // If online, create via API
         if (authState.mode === 'online' && authState.currentRoomId) {
           try {
             const input: { name: string; colorIndex?: number; color?: string } = { name };
@@ -652,9 +691,6 @@ export const useDrawerStore = create<DrawerStore>()(
                 [category.id]: category,
               },
             }));
-
-            // Broadcast to other connected users
-            broadcastCategoryCreated(category);
           } catch (error) {
             console.error('Failed to create category:', error);
           }
@@ -679,7 +715,6 @@ export const useDrawerStore = create<DrawerStore>()(
         const authState = useAuthStore.getState();
         const timestamp = Date.now();
 
-        // If online, update via API
         if (authState.mode === 'online' && authState.currentRoomId) {
           try {
             const input: { name?: string; colorIndex?: number; color?: string; updatedAt: number } = { name, updatedAt: timestamp };
@@ -711,15 +746,6 @@ export const useDrawerStore = create<DrawerStore>()(
             },
           };
         });
-
-        // Broadcast to other connected users
-        const changes: { name?: string; colorIndex?: number; color?: string } = { name };
-        if (typeof colorOrIndex === 'number') {
-          changes.colorIndex = colorOrIndex;
-        } else {
-          changes.color = colorOrIndex;
-        }
-        broadcastCategoryUpdated(id, changes);
       },
 
       getCategoryColor: (categoryId) => {
@@ -727,10 +753,33 @@ export const useDrawerStore = create<DrawerStore>()(
         return category ? getCategoryColor(category) : undefined;
       },
 
+      reorderCategories: (orderedIds) => {
+        set((state) => {
+          const newCategories = { ...state.categories };
+          orderedIds.forEach((id, index) => {
+            if (newCategories[id]) {
+              newCategories[id] = { ...newCategories[id], displayOrder: index };
+            }
+          });
+          return { categories: newCategories };
+        });
+      },
+
+      getOrderedCategories: () => {
+        const { categories } = get();
+        return Object.values(categories).sort((a, b) => {
+          if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
+            return a.displayOrder - b.displayOrder;
+          }
+          if (a.displayOrder !== undefined) return -1;
+          if (b.displayOrder !== undefined) return 1;
+          return a.name.localeCompare(b.name);
+        });
+      },
+
       removeCategory: async (id) => {
         const authState = useAuthStore.getState();
 
-        // If online, delete via API
         if (authState.mode === 'online' && authState.currentRoomId) {
           try {
             await api.deleteCategory(authState.currentRoomId, id);
@@ -746,9 +795,6 @@ export const useDrawerStore = create<DrawerStore>()(
           );
           return { categories: remaining };
         });
-
-        // Broadcast to other connected users
-        broadcastCategoryDeleted(id);
       },
 
       setDividerCount: async (compartmentId, count) => {
@@ -761,7 +807,6 @@ export const useDrawerStore = create<DrawerStore>()(
         const compartment = drawer?.compartments[compartmentId];
         if (!compartment) return;
 
-        // If online and connected, update via API and use server-generated subcompartment IDs
         if (authState.mode === 'online' && isOnline) {
           try {
             const apiSubCompartments = await api.setDividerCount(activeDrawerId, compartmentId, count);
@@ -791,16 +836,12 @@ export const useDrawerStore = create<DrawerStore>()(
                 },
               },
             }));
-
-            // Broadcast to other connected users
-            broadcastDividersChanged(activeDrawerId, compartmentId, subCompartments);
             return;
           } catch (error) {
             console.error('Failed to set divider count:', error);
-            // Fall through to local mode
           }
         }
-        // Local mode (or offline fallback)
+
         const subCompartmentCount = count + 1;
         const existingItems = compartment.subCompartments
           .map((sc) => sc.item)
@@ -840,7 +881,6 @@ export const useDrawerStore = create<DrawerStore>()(
 
         const timestamp = Date.now();
 
-        // If online, update via API
         if (authState.mode === 'online') {
           try {
             await api.updateCompartment(activeDrawerId, compartmentId, { dividerOrientation: orientation, updatedAt: timestamp });
@@ -862,9 +902,6 @@ export const useDrawerStore = create<DrawerStore>()(
             },
           },
         }));
-
-        // Broadcast to other connected users
-        broadcastCompartmentUpdated(activeDrawerId, compartmentId, { dividerOrientation: orientation });
       },
 
       mergeSelectedCompartments: async () => {
@@ -879,37 +916,29 @@ export const useDrawerStore = create<DrawerStore>()(
         const compartmentIds = Array.from(selectedCompartmentIds);
         const compartments = compartmentIds.map(id => drawer.compartments[id]).filter(Boolean);
 
-        // Validate merge using helper (checks rectangle formation)
         const validation = canMergeCompartments(drawer.compartments, selectedCompartmentIds);
         if (!validation.valid) {
-          console.error(validation.error);
+          // Invalid merge selection
           return;
         }
 
-        // Get all cells occupied by selected compartments
         const allCells = compartments.flatMap(c => getOccupiedCells(c));
         const bbox = getBoundingBox(allCells);
-
-        // Find anchor (top-left) compartment
         const anchor = compartments.find(c => c.row === bbox.minRow && c.col === bbox.minCol);
         if (!anchor) return;
 
         const toDeleteIds = compartmentIds.filter(id => id !== anchor.id);
         const rowSpan = bbox.maxRow - bbox.minRow + 1;
         const colSpan = bbox.maxCol - bbox.minCol + 1;
-
-        // Collect all items from compartments being merged
         const allItems = compartments
           .flatMap(c => c.subCompartments)
           .filter(sc => sc.item)
           .map(sc => sc.item!);
 
-        // If online and connected, try API
         if (authState.mode === 'online' && isOnline) {
           try {
             const result = await api.mergeCompartments(activeDrawerId, compartmentIds);
 
-            // Update local state with server response
             const newCompartments = { ...drawer.compartments };
             for (const id of result.deletedIds) {
               delete newCompartments[id];
@@ -944,20 +973,12 @@ export const useDrawerStore = create<DrawerStore>()(
               },
               selectedCompartmentIds: new Set([result.compartment.id]),
             }));
-
-            // Broadcast merge to other users
-            broadcastCompartmentsMerged(
-              activeDrawerId,
-              result.deletedIds,
-              newCompartments[result.compartment.id]
-            );
             return;
           } catch (error) {
             console.error('Failed to merge compartments:', error);
-            // Fall through to local mode
           }
         }
-        // Local mode (or offline fallback)
+
         const subCount = Math.max(2, allItems.length);
         const subCompartments: SubCompartment[] = Array.from({ length: subCount }, (_, i) => ({
           id: generateId(),
@@ -999,21 +1020,18 @@ export const useDrawerStore = create<DrawerStore>()(
         const colSpan = compartment.colSpan ?? 1;
 
         if (rowSpan === 1 && colSpan === 1) {
-          console.error('Cannot split a single-cell compartment');
+          // Cannot split a single-cell compartment
           return;
         }
 
-        // Collect existing items
         const existingItems = compartment.subCompartments
           .filter(sc => sc.item)
           .map(sc => sc.item!);
 
-        // If online and connected, try API
         if (authState.mode === 'online' && isOnline) {
           try {
             const result = await api.splitCompartment(activeDrawerId, compartmentId);
 
-            // Update local state with server response
             const newCompartments = { ...drawer.compartments };
 
             for (const comp of result.compartments) {
@@ -1047,17 +1065,12 @@ export const useDrawerStore = create<DrawerStore>()(
               },
               selectedCompartmentIds: new Set([compartmentId]),
             }));
-
-            // Broadcast split to other users
-            const newCompartmentsList = result.compartments.map(comp => newCompartments[comp.id]);
-            broadcastCompartmentSplit(activeDrawerId, compartmentId, newCompartmentsList);
             return;
           } catch (error) {
             console.error('Failed to split compartment:', error);
-            // Fall through to local mode
           }
         }
-        // Local mode (or offline fallback)
+
         const newCompartments = { ...drawer.compartments };
         let itemIndex = 0;
 
@@ -1114,7 +1127,6 @@ export const useDrawerStore = create<DrawerStore>()(
 
         const timestamp = Date.now();
 
-        // If online and connected, update via API
         if (authState.mode === 'online' && isOnline) {
           try {
             await api.updateSubCompartment(activeDrawerId, subCompartmentId, {
@@ -1124,8 +1136,7 @@ export const useDrawerStore = create<DrawerStore>()(
               updatedAt: timestamp,
             });
           } catch (error) {
-            console.error('Failed to update item:', error);
-            // Queue for later sync
+            console.error('Failed to update item, queuing for later:', error);
             addPendingOperation({
               type: 'update',
               entity: 'subCompartment',
@@ -1134,7 +1145,6 @@ export const useDrawerStore = create<DrawerStore>()(
             });
           }
         } else if (authState.mode === 'online' && !isOnline) {
-          // Offline but authenticated - queue for later
           addPendingOperation({
             type: 'update',
             entity: 'subCompartment',
@@ -1159,9 +1169,6 @@ export const useDrawerStore = create<DrawerStore>()(
             },
           },
         }));
-
-        // Broadcast to other connected users
-        broadcastItemUpdated(activeDrawerId, compartmentId, subCompartmentId, item);
       },
 
       selectCompartment: (compartmentId, additive = false, drawerId) => {
@@ -1169,7 +1176,6 @@ export const useDrawerStore = create<DrawerStore>()(
         const targetDrawerId = drawerId ?? state.activeDrawerId;
         const drawer = targetDrawerId ? state.drawers[targetDrawerId] : null;
         const compartment = drawer?.compartments[compartmentId];
-        // If sheet is collapsed on mobile, reset to inventory mode (not edit mode)
         const shouldResetMode = state.panelSnapPoint === 'collapsed' && state.panelMode === 'edit';
 
         set((s) => {
@@ -1177,6 +1183,11 @@ export const useDrawerStore = create<DrawerStore>()(
             ? new Set(s.selectedCompartmentIds)
             : new Set<string>();
           newSelection.add(compartmentId);
+
+          const wasInEditMode = s.panelMode === 'edit';
+          const becomingMultiSelect = s.selectedCompartmentIds.size === 1 && newSelection.size > 1;
+          const shouldClosePanel = wasInEditMode && becomingMultiSelect;
+
           return {
             activeDrawerId: targetDrawerId,
             selectedCompartmentIds: newSelection,
@@ -1186,6 +1197,9 @@ export const useDrawerStore = create<DrawerStore>()(
               ? { row: compartment.row, col: compartment.col }
               : s.lastSelectedPosition,
             ...(shouldResetMode && { panelMode: 'inventory' as PanelMode }),
+            ...(shouldClosePanel && s.panelWasVisibleBeforeEdit && { panelMode: 'inventory' as PanelMode }),
+            ...(shouldClosePanel && { isPanelVisible: s.panelWasVisibleBeforeEdit }),
+            ...(shouldClosePanel && !s.panelWasVisibleBeforeEdit && { panelSnapPoint: 'collapsed' as PanelSnapPoint }),
           };
         });
       },
@@ -1198,21 +1212,16 @@ export const useDrawerStore = create<DrawerStore>()(
         const { panelWasVisibleBeforeEdit, panelMode, selectedCompartmentIds, selectedDrawerIds } = get();
         const wasInEditMode = panelMode === 'edit';
         const hadSelection = selectedCompartmentIds.size > 0 || selectedDrawerIds.size > 0;
-        // Only restore panel state if we were in edit mode with a selection
         const shouldRestorePanel = wasInEditMode && hadSelection;
 
         set({
           selectedCompartmentIds: new Set(),
           selectedSubCompartmentId: null,
           selectedDrawerIds: new Set(),
-          // Don't change panelMode here - keep it as 'edit' when closing.
-          // Mode swap to 'inventory' happens when panel is reopened with no selection
-          // (same behavior as mobile sheet)
+          lastSelectedPosition: null,
           ...(shouldRestorePanel && panelWasVisibleBeforeEdit && { panelMode: 'inventory' as PanelMode }),
           ...(shouldRestorePanel && { isPanelVisible: panelWasVisibleBeforeEdit }),
-          // On mobile, collapse sheet if it wasn't visible before edit
           ...(shouldRestorePanel && !panelWasVisibleBeforeEdit && { panelSnapPoint: 'collapsed' as PanelSnapPoint }),
-          // Reset the flag after using it to prevent stale state in future sessions
           ...(shouldRestorePanel && { panelWasVisibleBeforeEdit: false }),
         });
       },
@@ -1223,27 +1232,34 @@ export const useDrawerStore = create<DrawerStore>()(
 
         set((state) => {
           const newSelection = new Set(state.selectedCompartmentIds);
-          if (newSelection.has(compartmentId)) {
+          const wasSelected = newSelection.has(compartmentId);
+          if (wasSelected) {
             newSelection.delete(compartmentId);
           } else {
             newSelection.add(compartmentId);
           }
 
-          // Auto-open edit pane when multi-selecting
-          const openEditPane = newSelection.size > 1;
+          const wasInEditMode = state.panelMode === 'edit';
+          const becomingMultiSelect = state.selectedCompartmentIds.size === 1 && newSelection.size > 1;
+          const shouldClosePanel = wasInEditMode && becomingMultiSelect;
 
           return {
             selectedCompartmentIds: newSelection,
-            lastSelectedPosition: compartment
-              ? { row: compartment.row, col: compartment.col }
-              : state.lastSelectedPosition,
-            ...(openEditPane && { panelMode: 'edit' as PanelMode, isPanelVisible: true }),
+            lastSelectedPosition: newSelection.size === 0
+              ? null
+              : compartment
+                ? { row: compartment.row, col: compartment.col }
+                : state.lastSelectedPosition,
+            ...(shouldClosePanel && state.panelWasVisibleBeforeEdit && { panelMode: 'inventory' as PanelMode }),
+            ...(shouldClosePanel && { isPanelVisible: state.panelWasVisibleBeforeEdit }),
+            ...(shouldClosePanel && !state.panelWasVisibleBeforeEdit && { panelSnapPoint: 'collapsed' as PanelSnapPoint }),
           };
         });
       },
 
       selectRectangle: (fromRow, fromCol, toRow, toCol) => {
-        const drawer = get().getActiveDrawer();
+        const state = get();
+        const drawer = state.getActiveDrawer();
         if (!drawer) return;
 
         const minRow = Math.min(fromRow, toRow);
@@ -1263,13 +1279,16 @@ export const useDrawerStore = create<DrawerStore>()(
           }
         });
 
-        // Auto-open edit pane when multi-selecting
-        const openEditPane = newSelection.size > 1;
+        const wasInEditMode = state.panelMode === 'edit';
+        const becomingMultiSelect = state.selectedCompartmentIds.size === 1 && newSelection.size > 1;
+        const shouldClosePanel = wasInEditMode && becomingMultiSelect;
 
         set({
           selectedCompartmentIds: newSelection,
           lastSelectedPosition: { row: toRow, col: toCol },
-          ...(openEditPane && { panelMode: 'edit' as PanelMode, isPanelVisible: true }),
+          ...(shouldClosePanel && state.panelWasVisibleBeforeEdit && { panelMode: 'inventory' as PanelMode }),
+          ...(shouldClosePanel && { isPanelVisible: state.panelWasVisibleBeforeEdit }),
+          ...(shouldClosePanel && !state.panelWasVisibleBeforeEdit && { panelSnapPoint: 'collapsed' as PanelSnapPoint }),
         });
       },
 
@@ -1284,7 +1303,6 @@ export const useDrawerStore = create<DrawerStore>()(
       setRectangleSelectStart: (start) => {
         set({
           rectangleSelectStart: start,
-          // Also set activeDrawerId so updateRectangleSelect works on first selection
           ...(start ? { activeDrawerId: start.drawerId } : {}),
         });
       },
@@ -1300,7 +1318,6 @@ export const useDrawerStore = create<DrawerStore>()(
           return;
         }
 
-        // Find all compartments within the rectangle
         const fromRow = Math.min(rectangleSelectStart.row, endRow);
         const toRow = Math.max(rectangleSelectStart.row, endRow);
         const fromCol = Math.min(rectangleSelectStart.col, endCol);
@@ -1401,32 +1418,80 @@ export const useDrawerStore = create<DrawerStore>()(
             [activeDrawerId]: { ...drawer, compartments: updatedCompartments },
           },
         }));
-
-        // Broadcast batch updates to other connected users
-        if (authState.mode === 'online') {
-          const syncUpdates: Array<{ compartmentId: string; subCompartmentId: string; item: StoredItem | null }> = [];
-          selectedCompartmentIds.forEach((compId) => {
-            const compartment = updatedCompartments[compId];
-            if (!compartment) return;
-            compartment.subCompartments.forEach((sc) => {
-              syncUpdates.push({
-                compartmentId: compId,
-                subCompartmentId: sc.id,
-                item: sc.item,
-              });
-            });
-          });
-          if (syncUpdates.length > 0) {
-            broadcastItemsBatchUpdated(activeDrawerId, syncUpdates);
-          }
-        }
       },
 
-      setDividerCountForSelected: (count) => {
-        const { selectedCompartmentIds, setDividerCount } = get();
-        selectedCompartmentIds.forEach((compId) => {
-          setDividerCount(compId, count);
+      toggleInventorySelection: (drawerId, compartmentId, subCompartmentId) => {
+        const key = `${drawerId}:${compartmentId}:${subCompartmentId}`;
+        set((state) => {
+          const newSelection = new Set(state.selectedInventoryIds);
+          if (newSelection.has(key)) {
+            newSelection.delete(key);
+          } else {
+            newSelection.add(key);
+          }
+          return { selectedInventoryIds: newSelection };
         });
+      },
+
+      clearInventorySelection: () => {
+        set({ selectedInventoryIds: new Set() });
+      },
+
+      selectAllInventory: (items) => {
+        const keys = items.map(
+          (item) => `${item.drawerId}:${item.compartmentId}:${item.subCompartmentId}`
+        );
+        set({ selectedInventoryIds: new Set(keys) });
+      },
+
+      applyToSelectedInventory: async (itemUpdates) => {
+        const { selectedInventoryIds, drawers } = get();
+        if (selectedInventoryIds.size === 0) return;
+
+        const updatedDrawers = { ...drawers };
+
+        selectedInventoryIds.forEach((key) => {
+          const [drawerId, compartmentId, subCompartmentId] = key.split(':');
+          const drawer = updatedDrawers[drawerId];
+          if (!drawer) return;
+
+          const compartment = drawer.compartments[compartmentId];
+          if (!compartment) return;
+
+          const scIndex = compartment.subCompartments.findIndex(
+            (sc) => sc.id === subCompartmentId
+          );
+          if (scIndex === -1) return;
+
+          const sc = compartment.subCompartments[scIndex];
+          const currentItem = sc.item;
+
+          const updatedItem: StoredItem = {
+            label: itemUpdates.label ?? currentItem?.label ?? '',
+            categoryId: itemUpdates.categoryId !== undefined
+              ? itemUpdates.categoryId
+              : currentItem?.categoryId,
+            quantity: itemUpdates.quantity !== undefined
+              ? itemUpdates.quantity
+              : currentItem?.quantity,
+          };
+
+          const newSubCompartments = [...compartment.subCompartments];
+          newSubCompartments[scIndex] = { ...sc, item: updatedItem };
+
+          updatedDrawers[drawerId] = {
+            ...drawer,
+            compartments: {
+              ...drawer.compartments,
+              [compartmentId]: {
+                ...compartment,
+                subCompartments: newSubCompartments,
+              },
+            },
+          };
+        });
+
+        set({ drawers: updatedDrawers });
       },
 
       setSearchQuery: (query) => {
@@ -1443,13 +1508,14 @@ export const useDrawerStore = create<DrawerStore>()(
           Object.values(drawer.compartments).forEach((comp) => {
             comp.subCompartments.forEach((sc) => {
               if (sc.item) {
+                const key = `${comp.id}:${sc.id}`;
                 if (fuzzyMatch(query, sc.item.label)) {
-                  matchIds.add(comp.id);
+                  matchIds.add(key);
                 }
                 if (sc.item.categoryId) {
                   const category = categories[sc.item.categoryId];
                   if (category && fuzzyMatch(query, category.name)) {
-                    matchIds.add(comp.id);
+                    matchIds.add(key);
                   }
                 }
               }
@@ -1466,8 +1532,6 @@ export const useDrawerStore = create<DrawerStore>()(
 
       setPanelVisible: (visible) => set({
         isPanelVisible: visible,
-        // Keep panelSnapPoint in sync so navigateToItem/navigateToDrawer can correctly
-        // determine if panel was visible (they check both isPanelVisible and panelSnapPoint)
         ...(!visible && { panelSnapPoint: 'collapsed' as PanelSnapPoint }),
       }),
       togglePanel: () => {
@@ -1478,22 +1542,15 @@ export const useDrawerStore = create<DrawerStore>()(
         set({
           isPanelVisible: isOpening,
           ...(isOpening && !hasSelection && { panelMode: 'inventory' as PanelMode }),
-          // Keep panelSnapPoint in sync when closing
           ...(!isOpening && { panelSnapPoint: 'collapsed' as PanelSnapPoint }),
         });
       },
       setPanelMode: (mode) => set({ panelMode: mode }),
-      setPanelSnapPoint: (snap) => {
-        set({ panelSnapPoint: snap });
-      },
-      onSheetDragStart: () => {
-        // No-op - mode swap happens in setPanelSnapPoint when sheet actually opens
-      },
+      setPanelSnapPoint: (snap) => set({ panelSnapPoint: snap }),
       setInventoryGrouping: (grouping) => set({ inventoryGrouping: grouping }),
       navigateToItem: (drawerId, compartmentId) => {
         const { isPanelVisible, panelSnapPoint } = get();
         const wasSheetOpen = panelSnapPoint !== 'collapsed';
-        // On mobile, use sheet state; on desktop, use panel visibility
         const wasVisibleBefore = isPanelVisible || wasSheetOpen;
         set({
           activeDrawerId: drawerId,
@@ -1509,7 +1566,6 @@ export const useDrawerStore = create<DrawerStore>()(
       navigateToDrawer: (drawerId) => {
         const { isPanelVisible, panelSnapPoint } = get();
         const wasSheetOpen = panelSnapPoint !== 'collapsed';
-        // On mobile, use sheet state; on desktop, use panel visibility
         const wasVisibleBefore = isPanelVisible || wasSheetOpen;
         set({
           activeDrawerId: drawerId,
@@ -1524,7 +1580,6 @@ export const useDrawerStore = create<DrawerStore>()(
       },
       enterEditMode: () => {
         const { isPanelVisible, panelSnapPoint, panelMode } = get();
-        // Don't save state if already in edit mode
         if (panelMode === 'edit') return;
         const wasSheetOpen = panelSnapPoint !== 'collapsed';
         const wasVisibleBefore = isPanelVisible || wasSheetOpen;
@@ -1536,11 +1591,7 @@ export const useDrawerStore = create<DrawerStore>()(
         });
       },
       exitEditMode: () => {
-        set({
-          panelMode: 'inventory' as PanelMode,
-          // Don't change panelWasVisibleBeforeEdit - preserve the original state
-          // so deselecting after manually exiting edit mode behaves correctly
-        });
+        set({ panelMode: 'inventory' as PanelMode });
       },
 
       getActiveDrawer: () => {
@@ -1563,11 +1614,8 @@ export const useDrawerStore = create<DrawerStore>()(
       },
 
       loadFromApi: (room) => {
-        // Transform API data to local store format
         const drawers: Record<string, Drawer> = {};
         const drawerOrder: string[] = [];
-
-        // Sort drawers by sortOrder
         const sortedDrawers = [...room.drawers].sort((a, b) => a.sortOrder - b.sortOrder);
 
         for (const apiDrawer of sortedDrawers) {
@@ -1607,6 +1655,9 @@ export const useDrawerStore = create<DrawerStore>()(
             compartments,
             gridX: apiDrawer.gridX,
             gridY: apiDrawer.gridY,
+            compartmentWidth: apiDrawer.compartmentWidth,
+            compartmentHeight: apiDrawer.compartmentHeight,
+            updatedAt: apiDrawer.updatedAt,
           };
 
           drawerOrder.push(apiDrawer.id);

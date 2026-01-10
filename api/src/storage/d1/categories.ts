@@ -57,11 +57,10 @@ export class CategoryRepository implements ICategoryRepository {
     const category = await this.findById(id);
     if (!category) throw new NotFoundError('Category not found');
 
-    // Timestamp-based conflict resolution: skip if incoming update is older
     if (input.updatedAt !== undefined) {
       const storedTime = new Date(category.updatedAt).getTime();
       if (input.updatedAt < storedTime) {
-        return null; // Skip - incoming update is older
+        return null;
       }
     }
 
