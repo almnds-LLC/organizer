@@ -6,6 +6,8 @@ import { AddDrawerModal } from './components/ui/AddDrawerModal';
 import { CategoryModal } from './components/ui/CategoryModal';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
 import { CollaboratorCursors } from './components/ui/CollaboratorCursors';
+import { SelectionBar } from './components/ui/SelectionBar';
+import { ToastContainer } from './components/ui/Toast';
 import { useAuthStore } from './store/authStore';
 import { useDrawerStore } from './store/drawerStore';
 import { useRoomSync } from './hooks/useRoomSync';
@@ -72,6 +74,8 @@ function App() {
       <AddDrawerModal />
       <CategoryModal />
       {isAuthenticated && <CollaboratorCursors />}
+      <SelectionBar />
+      <ToastContainer />
     </div>
   );
 }
