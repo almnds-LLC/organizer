@@ -62,13 +62,13 @@ describe('compartmentHelpers', () => {
     });
 
     it('should handle undefined rowSpan/colSpan as 1', () => {
-      const comp: Compartment = {
+      const comp = {
         id: 'comp1',
         row: 0,
         col: 0,
         dividerOrientation: 'horizontal',
         subCompartments: [],
-      } as Compartment;
+      } as unknown as Compartment;
       const cells = getOccupiedCells(comp);
 
       expect(cells).toHaveLength(1);
@@ -217,13 +217,13 @@ describe('compartmentHelpers', () => {
     });
 
     it('should handle undefined spans as 1', () => {
-      const comp: Compartment = {
+      const comp = {
         id: 'comp1',
         row: 0,
         col: 0,
         dividerOrientation: 'horizontal',
         subCompartments: [],
-      } as Compartment;
+      } as unknown as Compartment;
       expect(canSplitCompartment(comp)).toBe(false);
     });
   });
